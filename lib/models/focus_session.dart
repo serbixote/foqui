@@ -15,8 +15,6 @@ class FocusSession {
     this.stoppedAt,
     this.pausedAt,
     this.labelId,
-    this.labelEmoji,
-    this.labelName,
     this.sharedSessionId,
     this.inviteCode,
     this.sharedHost = false,
@@ -35,10 +33,8 @@ class FocusSession {
   final DateTime? pausedAt;
   final SessionOutcome outcome;
 
-  /// Snapshot of the label chosen for this session. Older sessions have none.
+  /// Label this session uses. The name and emoji live on that label.
   final String? labelId;
-  final String? labelEmoji;
-  final String? labelName;
 
   /// Shared room this phone is part of, when the session was shared or joined.
   final String? sharedSessionId;
@@ -49,7 +45,7 @@ class FocusSession {
   /// True on the phone that created the shared room.
   final bool sharedHost;
 
-  bool get hasLabel => labelId != null && (labelName?.isNotEmpty ?? false);
+  bool get hasLabel => labelId != null;
 
   bool isRunningAt(DateTime now) {
     if (outcome != SessionOutcome.active) return false;
@@ -87,8 +83,6 @@ class FocusSession {
     DateTime? stoppedAt,
     Object? pausedAt = _unchanged,
     String? labelId,
-    String? labelEmoji,
-    String? labelName,
     String? sharedSessionId,
     String? inviteCode,
     bool? sharedHost,
@@ -105,8 +99,6 @@ class FocusSession {
           ? this.pausedAt
           : pausedAt as DateTime?,
       labelId: labelId ?? this.labelId,
-      labelEmoji: labelEmoji ?? this.labelEmoji,
-      labelName: labelName ?? this.labelName,
       sharedSessionId: sharedSessionId ?? this.sharedSessionId,
       inviteCode: inviteCode ?? this.inviteCode,
       sharedHost: sharedHost ?? this.sharedHost,
@@ -124,8 +116,6 @@ class FocusSession {
       'pausedAt': pausedAt?.millisecondsSinceEpoch,
       'outcome': outcome.name,
       'labelId': labelId,
-      'labelEmoji': labelEmoji,
-      'labelName': labelName,
       'sharedSessionId': sharedSessionId,
       'inviteCode': inviteCode,
       'sharedHost': sharedHost,
@@ -149,8 +139,6 @@ class FocusSession {
           : DateTime.fromMillisecondsSinceEpoch(json['pausedAt'] as int),
       outcome: SessionOutcome.values.byName(json['outcome'] as String),
       labelId: json['labelId'] as String?,
-      labelEmoji: json['labelEmoji'] as String?,
-      labelName: json['labelName'] as String?,
       sharedSessionId: json['sharedSessionId'] as String?,
       inviteCode: json['inviteCode'] as String?,
       sharedHost: json['sharedHost'] == true,

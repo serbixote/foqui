@@ -362,12 +362,13 @@ void main() {
     expect(find.text('Deep work'), findsOneWidget);
     expect(find.text('Couple time'), findsOneWidget);
     expect(find.text('Family time'), findsOneWidget);
+    expect(find.text('Digital detox'), findsOneWidget);
     expect(
       find.descendant(
         of: find.byType(BlockListsScreen),
         matching: find.byType(SurfaceCard),
       ),
-      findsNWidgets(5),
+      findsNWidgets(6),
     );
     expect(
       find.descendant(
@@ -383,7 +384,7 @@ void main() {
           (widget) => widget is SurfaceCard && widget.radius == 14,
         ),
       ),
-      findsNWidgets(5),
+      findsNWidgets(6),
     );
     expect(
       find.descendant(
@@ -394,7 +395,7 @@ void main() {
               widget.padding == const EdgeInsets.fromLTRB(22, 14, 22, 14),
         ),
       ),
-      findsNWidgets(5),
+      findsNWidgets(6),
     );
 
     await tester.tap(find.text('Block lists').last);
@@ -583,8 +584,6 @@ void main() {
                   stoppedAt: DateTime.utc(2026, 11, 18, 9, 40),
                   outcome: SessionOutcome.completed,
                   labelId: 'study-session',
-                  labelEmoji: '📚',
-                  labelName: 'Study session',
                 ),
               ],
             ),
@@ -630,8 +629,6 @@ void main() {
                   stoppedAt: DateTime.utc(2026, 11, 18, 9, 40),
                   outcome: SessionOutcome.completed,
                   labelId: 'reading',
-                  labelEmoji: '📖',
-                  labelName: 'Reading',
                 ),
               ],
             ),
@@ -670,8 +667,6 @@ void main() {
           stoppedAt: DateTime.utc(2026, 11, 18, 10),
           outcome: SessionOutcome.completed,
           labelId: 'reading',
-          labelEmoji: '📖',
-          labelName: 'Reading',
         ),
       ],
     );
@@ -732,9 +727,7 @@ void main() {
     expect(find.text('Reading'), findsNothing);
     expect(find.text('Study session'), findsOneWidget);
     expect(find.text('Focus Time'), findsOneWidget);
-    expect(repository.sessions.single.labelId, 'focus-time');
-    expect(repository.sessions.single.labelName, 'Focus Time');
-    expect(repository.sessions.single.labelEmoji, '🎯');
+    expect(repository.sessions.single.labelId, 'reading');
   });
 
   testWidgets('app names stop where the line runs out', (tester) async {
@@ -899,7 +892,6 @@ void main() {
     expect(repository.sessions.single.outcome, SessionOutcome.created);
     expect(repository.sessions.single.blockListName, 'Social');
     expect(repository.sessions.single.labelId, 'focus-time');
-    expect(repository.sessions.single.labelName, 'Focus Time');
     expect(repository.sessions.single.endsAt, isNotNull);
 
     await tester.pump(const Duration(seconds: 2));
@@ -1074,8 +1066,6 @@ void main() {
     await pumpTransitions(tester);
 
     expect(repository.sessions.single.labelId, 'study-session');
-    expect(repository.sessions.single.labelEmoji, '📚');
-    expect(repository.sessions.single.labelName, 'Study session');
     expect(find.text('Study session'), findsOneWidget);
   });
 
@@ -1220,8 +1210,6 @@ void main() {
                   stoppedAt: ended,
                   outcome: SessionOutcome.completed,
                   labelId: 'study-session',
-                  labelEmoji: '📚',
-                  labelName: 'study session',
                 ),
               ],
             ),
@@ -1245,7 +1233,7 @@ void main() {
 
     expect(find.text('All time'), findsOneWidget);
     expect(find.text('By label'), findsOneWidget);
-    expect(find.text('study session'), findsWidgets);
+    expect(find.text('Study session'), findsWidgets);
     expect(find.text('By list'), findsOneWidget);
     expect(find.text('40 min'), findsWidgets);
     expect(find.text('Work'), findsWidgets);
@@ -1632,7 +1620,6 @@ void main() {
     expect(find.text('Deep work'), findsOneWidget);
     expect(find.text('Focus Time'), findsNothing);
     expect(repository.sessions.single.labelId, 'deep-work');
-    expect(repository.sessions.single.labelName, 'Deep work');
 
     await tester.tap(find.text('Work'));
     await pumpTransitions(tester);

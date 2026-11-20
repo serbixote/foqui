@@ -119,9 +119,8 @@ void main() {
     expect(restored.inviteCode, session.inviteCode);
     expect(restored.sharedHost, isTrue);
     expect(sharedDurationMinutes(session), 25);
-    expect(sharedTitleOf(session, fallback: 'Focus'), 'Focus');
-    final labeled = session.copyWith(labelName: 'Deep work');
-    expect(sharedTitleOf(labeled, fallback: 'Focus'), 'Deep work');
+    expect(sharedTitleOf(null, fallback: 'Focus'), 'Focus');
+    expect(sharedTitleOf('Deep work', fallback: 'Focus'), 'Deep work');
     expect(
       sharedStatusFor(SessionOutcome.created),
       SharedSessionStatus.waiting,

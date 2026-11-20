@@ -19,6 +19,8 @@ import 'app_shell.dart';
 import 'sign_in_screen.dart';
 
 const _usernamePause = Duration(milliseconds: 400);
+const _stepDuration = Duration(milliseconds: 320);
+const _stepTravel = 0.18;
 
 /// Sends a signed-in person through onboarding until their profile is done.
 class SignedInGate extends ConsumerWidget {
@@ -105,6 +107,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   var _usernameGeneration = 0;
   String? _checkedUsername;
   _HandleStatus? _handle;
+  var _forward = true;
   var _busy = false;
   var _apps = 0;
   var _categories = 0;
@@ -328,7 +331,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _saveList() {
-      final name = storedBlockListName(id: _listId, typed: _listName.text);
+    final name = storedBlockListName(id: _listId, typed: _listName.text);
     return _run(() async {
       var apps = _apps;
       var categories = _categories;
@@ -376,7 +379,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   void _goTo(int index) {
     FocusManager.instance.primaryFocus?.unfocus();
     HapticFeedback.selectionClick();
-    setState(() => _stepIndex = index);
+    setState(() {
+      _forward = index > _stepIndex;
+      _stepIndex = index;
+    });
   }
 
   @override
@@ -418,9 +424,22 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               const SizedBox(height: 12),
               _StepDots(index: index, count: steps.length),
               const SizedBox(height: 28),
-              Expanded(child: SingleChildScrollView(child: _body(step))),
-              const SizedBox(height: 16),
-              ..._actions(step),
+              Expanded(
+                child: _StepSwitch(
+                  step: step,
+                  forward: _forward,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(child: _body(step)),
+                      ),
+                      const SizedBox(height: 16),
+                      ..._actions(step),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -530,20 +549,54 @@ class _TopBar extends StatelessWidget {
       height: 36,
       child: Row(
         children: [
-          if (showBack)
-            TextButton(
-              onPressed: busy ? null : onBack,
-              style: style,
-              child: Text(tr('common_back')),
-            ),
+          _BarAction(
+            shown: showBack,
+            label: tr('common_back'),
+            style: style,
+            onPressed: busy ? null : onBack,
+          ),
           const Spacer(),
-          if (showSignOut)
-            TextButton(
-              onPressed: busy ? null : onSignOut,
-              style: style,
-              child: Text(tr('home_sign_out')),
-            ),
+          _BarAction(
+            shown: showSignOut,
+            label: tr('home_sign_out'),
+            style: style,
+            onPressed: busy ? null : onSignOut,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+class _BarAction extends StatelessWidget {
+  const _BarAction({
+    required this.shown,
+    required this.label,
+    required this.style,
+    required this.onPressed,
+  });
+
+  final bool shown;
+  final String label;
+  final ButtonStyle style;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: !shown,
+      child: ExcludeSemantics(
+        excluding: !shown,
+        child: AnimatedOpacity(
+          opacity: shown ? 1 : 0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOut,
+          child: TextButton(
+            onPressed: onPressed,
+            style: style,
+            child: Text(label),
+          ),
+        ),
       ),
     );
   }
@@ -565,7 +618,8 @@ class _StepDots extends StatelessWidget {
           for (var i = 0; i < count; i++) ...[
             if (i > 0) const SizedBox(width: 6),
             AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              duration: _stepDuration,
+              curve: Curves.easeOutCubic,
               height: 4,
               width: i == index ? 28 : 12,
               decoration: BoxDecoration(
@@ -575,6 +629,55 @@ class _StepDots extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _StepSwitch extends StatelessWidget {
+  const _StepSwitch({
+    required this.step,
+    required this.forward,
+    required this.child,
+  });
+
+  final _Step step;
+  final bool forward;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final stepKey = ValueKey(step);
+    final enter = Offset(forward ? _stepTravel : -_stepTravel, 0);
+    return ClipRect(
+      child: AnimatedSwitcher(
+        duration: _stepDuration,
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        layoutBuilder: (currentChild, previousChildren) {
+          return Stack(
+            alignment: Alignment.topCenter,
+            fit: StackFit.expand,
+            children: [...previousChildren, ?currentChild],
+          );
+        },
+        transitionBuilder: (child, animation) {
+          final incoming = child.key == stepKey;
+          return IgnorePointer(
+            ignoring: !incoming,
+            child: FadeTransition(
+              opacity: animation,
+              child: SlideTransition(
+                position: Tween<Offset>(
+                  begin: incoming ? enter : -enter,
+                  end: Offset.zero,
+                ).animate(animation),
+                child: child,
+              ),
+            ),
+          );
+        },
+        child: KeyedSubtree(key: stepKey, child: child),
       ),
     );
   }

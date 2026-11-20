@@ -1,4 +1,5 @@
 import '../l10n/tr.dart';
+import 'focus_label.dart';
 import 'focus_session.dart';
 
 /// One local calendar day in the trailing week.
@@ -112,14 +113,18 @@ class FocusStats {
 /// Time from a session that crosses midnight is split across those days.
 /// The streak is the run of days with focus time ending today, or yesterday
 /// when today has none yet.
-FocusStats summarizeFocus(List<FocusSession> sessions, DateTime now) {
+FocusStats summarizeFocus(
+  List<FocusSession> sessions,
+  DateTime now, {
+  List<FocusLabel> labels = const [],
+}) {
   final current = now.toLocal();
   final today = DateTime(current.year, current.month, current.day);
   final weekStart = today.subtract(const Duration(days: 6));
   final tomorrow = today.add(const Duration(days: 1));
   final byDay = <DateTime, Duration>{};
   final lists = <String, _ListTally>{};
-  final labels = <String, _LabelTally>{};
+  final labelTallies = <String, _LabelTally>{};
   var focused = Duration.zero;
   var longest = Duration.zero;
   var givenBack = Duration.zero;
@@ -163,22 +168,14 @@ FocusStats summarizeFocus(List<FocusSession> sessions, DateTime now) {
       tally.latestStart = session.startedAt;
     }
 
-    final labelId = session.labelId;
-    final labelName = session.labelName;
+    final resolved = labelForId(session.labelId, labels);
     _LabelTally? labelTally;
-    if (session.hasLabel && labelId != null && labelName != null) {
-      labelTally = labels.putIfAbsent(
-        labelId,
-        () =>
-            _LabelTally(session.labelEmoji ?? '', labelName, session.startedAt),
+    if (resolved != null) {
+      labelTally = labelTallies.putIfAbsent(
+        resolved.id,
+        () => _LabelTally(resolved.emoji, resolved.name),
       );
       labelTally.sessions++;
-      if (!session.startedAt.isBefore(labelTally.latestStart)) {
-        labelTally
-          ..emoji = session.labelEmoji ?? ''
-          ..name = labelName
-          ..latestStart = session.startedAt;
-      }
     }
 
     final end = _focusEnd(session, current);
@@ -253,7 +250,7 @@ FocusStats summarizeFocus(List<FocusSession> sessions, DateTime now) {
       });
   final byLabel =
       [
-        for (final entry in labels.entries)
+        for (final entry in labelTallies.entries)
           LabelFocus(
             id: entry.key,
             emoji: entry.value.emoji,
@@ -347,11 +344,10 @@ class _ListTally {
 }
 
 class _LabelTally {
-  _LabelTally(this.emoji, this.name, this.latestStart);
+  _LabelTally(this.emoji, this.name);
 
-  String emoji;
-  String name;
-  DateTime latestStart;
+  final String emoji;
+  final String name;
   Duration focused = Duration.zero;
   var sessions = 0;
 }

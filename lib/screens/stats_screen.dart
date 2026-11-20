@@ -42,8 +42,13 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final sessions = ref.watch(focusControllerProvider).sessions;
-    final stats = summarizeFocus(sessions, DateTime.now());
+    final focus = ref.watch(focusControllerProvider);
+    final sessions = focus.sessions;
+    final stats = summarizeFocus(
+      sessions,
+      DateTime.now(),
+      labels: focus.labels,
+    );
 
     final header = ScreenHeader(
       title: tr('stats_title'),

@@ -498,11 +498,8 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
 }
 
 String _labelName(FocusSession session, List<FocusLabel> labels) {
-  final index = _selectedLabel(session, labels);
-  if (labels.isEmpty) {
-    return localizedLabelName(id: session.labelId, name: session.labelName);
-  }
-  final label = labels[index];
+  final label = labelForId(session.labelId, labels);
+  if (label == null) return localizedLabelName(id: session.labelId);
   return localizedLabelName(id: label.id, name: label.name);
 }
 
@@ -724,10 +721,12 @@ class _WaitingActions extends StatelessWidget {
 
 int _selectedLabel(FocusSession session, List<FocusLabel> labels) {
   if (labels.isEmpty) return 0;
-  final id = session.labelId;
-  if (id == null) return 0;
-  final index = labels.indexWhere((label) => label.id == id);
-  return index < 0 ? 0 : index;
+  final shown = labelForId(session.labelId, labels);
+  if (shown == null) return 0;
+  final index = labels.indexWhere((label) => label.id == shown.id);
+  if (index >= 0) return index;
+  final focus = labels.indexWhere((label) => label.id == focusTimeLabelId);
+  return focus < 0 ? 0 : focus;
 }
 
 const _labelPadLeft = 12.0;

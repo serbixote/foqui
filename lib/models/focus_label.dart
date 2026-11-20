@@ -52,6 +52,32 @@ class FocusLabel {
   }
 }
 
+/// The label [id] should show.
+///
+/// A saved label wins, so a rename shows up everywhere. An id that no longer
+/// belongs to a label counts as Focus Time. With no label list, the built-in
+/// labels still resolve. Null means the session has no label.
+FocusLabel? labelForId(String? id, List<FocusLabel> labels) {
+  if (id == null) return null;
+  for (final label in labels) {
+    if (label.id == id) return label;
+  }
+  if (labels.isEmpty) {
+    for (final label in kBuiltInFocusLabels) {
+      if (label.id == id) return label;
+    }
+  }
+  return focusTimeLabel(labels);
+}
+
+/// Focus Time from [labels], or the built-in one when that list has none.
+FocusLabel focusTimeLabel(List<FocusLabel> labels) {
+  for (final label in labels) {
+    if (label.id == focusTimeLabelId) return label;
+  }
+  return kBuiltInFocusLabels.first;
+}
+
 /// True for a label every account starts with. Those stay fixed.
 bool isBuiltInLabel(String id) {
   for (final label in kBuiltInFocusLabels) {
@@ -92,6 +118,12 @@ final kBuiltInFocusLabels = [
     name: 'Family time',
     createdAt: _builtIn,
   ),
+  FocusLabel(
+    id: 'digital-detox',
+    emoji: '🌿',
+    name: 'Digital detox',
+    createdAt: _builtIn,
+  ),
 ];
 
 final _builtIn = DateTime.utc(2026, 1, 1);
@@ -102,6 +134,7 @@ const builtInLabelKeys = {
   'deep-work': 'label_deep_work',
   'couple-time': 'label_couple',
   'family-time': 'label_family',
+  'digital-detox': 'label_detox',
 };
 
 /// Built-in names follow the current language. A renamed or custom label stays

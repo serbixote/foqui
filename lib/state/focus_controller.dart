@@ -448,7 +448,7 @@ class FocusController extends Notifier<FocusState> {
 
   Future<void> addLabel({required String emoji, required String name}) async {
     final label = FocusLabel(
-      id: _uuid.v4(),
+      id: _freshLabelId(),
       emoji: emoji,
       name: capitalizeLabelName(name),
       createdAt: DateTime.now(),
@@ -458,7 +458,7 @@ class FocusController extends Notifier<FocusState> {
     await ref.read(focusRepositoryProvider).writeLabels(customLabels);
   }
 
-  /// Changes a label's emoji or name. Past sessions that used it keep the new name.
+  /// Changes a label's emoji or name. Sessions keep the id and show this name.
   ///
   /// Labels that come with the app stay as they are.
   Future<void> updateLabel({
@@ -494,29 +494,12 @@ class FocusController extends Notifier<FocusState> {
       customLabels[index] = updated;
     }
 
-    var sessionsChanged = false;
-    final sessions = <FocusSession>[];
-    for (final session in state.sessions) {
-      if (session.labelId != id ||
-          (session.labelEmoji == updated.emoji &&
-              session.labelName == updated.name)) {
-        sessions.add(session);
-        continue;
-      }
-      sessionsChanged = true;
-      sessions.add(
-        session.copyWith(labelEmoji: updated.emoji, labelName: updated.name),
-      );
-    }
-
-    state = state.copyWith(customLabels: customLabels, sessions: sessions);
-    final repository = ref.read(focusRepositoryProvider);
-    await repository.writeLabels(customLabels);
-    if (sessionsChanged) await repository.writeSessions(sessions);
+    state = state.copyWith(customLabels: customLabels);
+    await ref.read(focusRepositoryProvider).writeLabels(customLabels);
   }
 
-  /// Removes a label the user created. Sessions that wore it switch to Focus
-  /// Time, so that time stays in history and stats. The default labels stay.
+  /// Removes a label the user created. Sessions keep its id. History and stats
+  /// show Focus Time once that label is gone. The default labels stay.
   Future<void> deleteLabel(String id) async {
     if (isBuiltInLabel(id)) return;
     FocusLabel? current;
@@ -528,38 +511,27 @@ class FocusController extends Notifier<FocusState> {
     }
     if (current == null) return;
 
-    final focusTime = _focusTimeLabel();
     final customLabels = [...state.customLabels]
       ..removeWhere((label) => label.id == id);
-
-    var sessionsChanged = false;
-    final sessions = <FocusSession>[];
-    for (final session in state.sessions) {
-      if (session.labelId != id) {
-        sessions.add(session);
-        continue;
-      }
-      sessionsChanged = true;
-      sessions.add(
-        session.copyWith(
-          labelId: focusTime.id,
-          labelEmoji: focusTime.emoji,
-          labelName: focusTime.name,
-        ),
-      );
-    }
-
-    state = state.copyWith(customLabels: customLabels, sessions: sessions);
-    final repository = ref.read(focusRepositoryProvider);
-    await repository.writeLabels(customLabels);
-    if (sessionsChanged) await repository.writeSessions(sessions);
+    state = state.copyWith(customLabels: customLabels);
+    await ref.read(focusRepositoryProvider).writeLabels(customLabels);
   }
 
-  FocusLabel _focusTimeLabel() {
-    for (final label in state.labels) {
-      if (label.id == focusTimeLabelId) return label;
+  /// An id no label and no session already uses.
+  ///
+  /// A new label with an old name must not pick up sessions that still point
+  /// at a label which was deleted.
+  String _freshLabelId() {
+    final taken = <String>{
+      for (final label in kBuiltInFocusLabels) label.id,
+      for (final label in state.customLabels) label.id,
+      for (final session in state.sessions)
+        if (session.labelId != null) session.labelId!,
+    };
+    while (true) {
+      final id = _uuid.v4();
+      if (!taken.contains(id)) return id;
     }
-    return kBuiltInFocusLabels.first;
   }
 
   Future<void> deleteList(String id) async {
@@ -613,8 +585,6 @@ class FocusController extends Notifier<FocusState> {
           endsAt: endsAt,
           outcome: SessionOutcome.created,
           labelId: label?.id,
-          labelEmoji: label?.emoji,
-          labelName: label?.name,
         ),
       ),
     ]);
@@ -659,8 +629,6 @@ class FocusController extends Notifier<FocusState> {
           endsAt: endsAt,
           outcome: SessionOutcome.active,
           labelId: label?.id,
-          labelEmoji: label?.emoji,
-          labelName: label?.name,
         ),
       ),
     ]);
@@ -727,21 +695,12 @@ class FocusController extends Notifier<FocusState> {
     var changed = false;
     final sessions = <FocusSession>[];
     for (final session in state.sessions) {
-      if (session.id != sessionId ||
-          (session.labelId == label.id &&
-              session.labelEmoji == label.emoji &&
-              session.labelName == label.name)) {
+      if (session.id != sessionId || session.labelId == label.id) {
         sessions.add(session);
         continue;
       }
       changed = true;
-      sessions.add(
-        session.copyWith(
-          labelId: label.id,
-          labelEmoji: label.emoji,
-          labelName: label.name,
-        ),
-      );
+      sessions.add(session.copyWith(labelId: label.id));
     }
     if (!changed) return;
     state = state.copyWith(sessions: sessions);
@@ -752,11 +711,7 @@ class FocusController extends Notifier<FocusState> {
   FocusSession _labeled(FocusSession session) {
     if (session.hasLabel) return session;
     final label = state.labels.first;
-    return session.copyWith(
-      labelId: label.id,
-      labelEmoji: label.emoji,
-      labelName: label.name,
-    );
+    return session.copyWith(labelId: label.id);
   }
 
   BlockList? _listById(String? listId) {
@@ -815,10 +770,11 @@ class FocusController extends Notifier<FocusState> {
     if (status == SharedSessionStatus.ended) return null;
     final now = DateTime.now();
     final endsAt = session.endsAt;
+    final label = labelForId(session.labelId, state.labels);
     final created = await repository.create(
       hostName: alias,
-      title: sharedTitleOf(session, fallback: tr('session_focus_fallback')),
-      labelEmoji: sharedEmojiOf(session),
+      title: sharedTitleOf(label?.name, fallback: tr('session_focus_fallback')),
+      labelEmoji: sharedEmojiOf(label?.emoji),
       durationMinutes: sharedDurationMinutes(session),
       status: status,
       startedAt: session.startedAt,
@@ -874,8 +830,6 @@ class FocusController extends Notifier<FocusState> {
         endsAt: endsAt,
         outcome: SessionOutcome.active,
         labelId: label?.id,
-        labelEmoji: shared.labelEmoji ?? label?.emoji,
-        labelName: shared.title,
         sharedSessionId: shared.id,
         inviteCode: inviteCode,
         sharedHost: shared.hostId == ref.read(authProvider).userId,

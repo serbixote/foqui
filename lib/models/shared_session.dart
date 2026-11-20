@@ -180,18 +180,18 @@ DateTime sharedExpiry({
   return now.add(sharedInviteLifetime);
 }
 
-String sharedTitleOf(FocusSession session, {required String fallback}) {
-  final name = session.labelName?.trim();
-  final title = (name == null || name.isEmpty) ? fallback : name;
+String sharedTitleOf(String? name, {required String fallback}) {
+  final trimmed = name?.trim();
+  final title = (trimmed == null || trimmed.isEmpty) ? fallback : trimmed;
   if (title.length <= 80) return title;
   return title.substring(0, 80);
 }
 
-String? sharedEmojiOf(FocusSession session) {
-  final emoji = session.labelEmoji?.trim();
-  if (emoji == null || emoji.isEmpty) return null;
-  if (emoji.length <= 32) return emoji;
-  return emoji.substring(0, 32);
+String? sharedEmojiOf(String? emoji) {
+  final trimmed = emoji?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+  if (trimmed.length <= 32) return trimmed;
+  return trimmed.substring(0, 32);
 }
 
 InviteProblem? problemWithInvite(SessionInvite invite, DateTime now) {

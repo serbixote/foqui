@@ -502,28 +502,12 @@ class _PermissionBanner extends ConsumerWidget {
 /// A label that still exists wins, so an edit shows up here. A label that was
 /// removed leaves Focus Time in its place.
 String? _labelTitle(FocusSession session, List<FocusLabel> labels) {
-  if (!session.hasLabel) return null;
-  final current = _labelNow(session, labels) ?? _focusTimeLabel(labels);
+  final current = labelForId(session.labelId, labels);
+  if (current == null) return null;
   final emoji = current.emoji;
   final name = localizedLabelName(id: current.id, name: current.name);
   if (emoji.isEmpty) return name;
   return '$emoji $name';
-}
-
-FocusLabel? _labelNow(FocusSession session, List<FocusLabel> labels) {
-  final id = session.labelId;
-  if (id == null) return null;
-  for (final label in labels) {
-    if (label.id == id) return label;
-  }
-  return null;
-}
-
-FocusLabel _focusTimeLabel(List<FocusLabel> labels) {
-  for (final label in labels) {
-    if (label.id == focusTimeLabelId) return label;
-  }
-  return kBuiltInFocusLabels.first;
 }
 
 class _HistoryTile extends StatelessWidget {

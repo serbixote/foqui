@@ -539,8 +539,6 @@ void main() {
         stoppedAt: DateTime(2026, 11, 10, 9, 50),
         outcome: SessionOutcome.completed,
         labelId: 'study-session',
-        labelEmoji: '📚',
-        labelName: 'study session',
       ),
       FocusSession(
         id: 'study-new',
@@ -551,8 +549,6 @@ void main() {
         stoppedAt: DateTime(2026, 11, 11, 10, 25),
         outcome: SessionOutcome.completed,
         labelId: 'study-session',
-        labelEmoji: '📖',
-        labelName: 'Study',
       ),
       FocusSession(
         id: 'family',
@@ -563,8 +559,6 @@ void main() {
         stoppedAt: DateTime(2026, 11, 11, 16, 40),
         outcome: SessionOutcome.endedEarly,
         labelId: 'family-time',
-        labelEmoji: '🏡',
-        labelName: 'family time',
       ),
       FocusSession(
         id: 'plain',
@@ -579,11 +573,11 @@ void main() {
 
     expect(stats.byLabel, hasLength(2));
     expect(stats.byLabel.first.id, 'study-session');
-    expect(stats.byLabel.first.name, 'Study');
-    expect(stats.byLabel.first.emoji, '📖');
+    expect(stats.byLabel.first.name, 'Study session');
+    expect(stats.byLabel.first.emoji, '📚');
     expect(stats.byLabel.first.focused, const Duration(minutes: 75));
     expect(stats.byLabel.first.sessions, 2);
-    expect(stats.byLabel.last.name, 'family time');
+    expect(stats.byLabel.last.name, 'Family time');
     expect(stats.byLabel.last.focused, const Duration(minutes: 40));
     expect(stats.focused, const Duration(minutes: 130));
     expect(stats.givenBack, const Duration(minutes: 20));
@@ -632,16 +626,16 @@ void main() {
     expect(sessions.single.labelId, isNull);
     expect(FocusSession.fromJson(open.toJson()).endsAt, isNull);
 
-    final labeled = session.copyWith(
-      labelId: 'deep-work',
-      labelEmoji: '🧠',
-      labelName: 'deep work',
-    );
-    final restored = FocusSession.fromJson(labeled.toJson());
+    final labeled = session.copyWith(labelId: 'deep-work');
+    final restored = FocusSession.fromJson({
+      ...labeled.toJson(),
+      'labelEmoji': '🧠',
+      'labelName': 'deep work',
+    });
     expect(restored.labelId, 'deep-work');
-    expect(restored.labelEmoji, '🧠');
-    expect(restored.labelName, 'deep work');
     expect(restored.hasLabel, isTrue);
+    expect(restored.toJson().containsKey('labelEmoji'), isFalse);
+    expect(restored.toJson().containsKey('labelName'), isFalse);
     expect(decodeBlockLists('not json'), isEmpty);
     expect(decodeSessions('not json'), isEmpty);
   });
@@ -706,7 +700,6 @@ void main() {
       const Duration(minutes: 25),
     );
     expect(created.sessions.single.labelId, 'focus-time');
-    expect(created.sessions.single.labelName, 'Focus Time');
 
     final study = created.labels.firstWhere(
       (label) => label.id == 'study-session',
@@ -715,8 +708,8 @@ void main() {
         .read(focusControllerProvider.notifier)
         .setSessionLabel(sessionId: created.sessions.single.id, label: study);
     expect(
-      container.read(focusControllerProvider).sessions.single.labelName,
-      'Study session',
+      container.read(focusControllerProvider).sessions.single.labelId,
+      'study-session',
     );
 
     await container
@@ -728,7 +721,6 @@ void main() {
     expect(started.sessions.single.id, created.sessions.single.id);
     expect(started.activeSession?.outcome, SessionOutcome.active);
     expect(started.activeSession?.labelId, 'study-session');
-    expect(started.activeSession?.labelEmoji, '📚');
     expect(started.activeSession?.blockListId, 'social');
     expect(repository.sessions.single.outcome, SessionOutcome.active);
   });
@@ -764,11 +756,6 @@ void main() {
       container.read(focusControllerProvider).sessions.single.labelId,
       'study-session',
     );
-    expect(
-      container.read(focusControllerProvider).sessions.single.labelName,
-      'Study session',
-    );
-
     await controller.discardSession(
       container.read(focusControllerProvider).sessions.single.id,
     );
@@ -776,8 +763,6 @@ void main() {
 
     final started = container.read(focusControllerProvider).activeSession;
     expect(started?.labelId, 'study-session');
-    expect(started?.labelEmoji, '📚');
-    expect(started?.labelName, 'Study session');
     expect(repository.sessions.single.labelId, 'study-session');
   });
 
@@ -1157,6 +1142,7 @@ void main() {
         'Deep work',
         'Couple time',
         'Family time',
+        'Digital detox',
       ],
     );
 
@@ -1182,8 +1168,6 @@ void main() {
           stoppedAt: DateTime.utc(2026, 11, 18, 9, 30),
           outcome: SessionOutcome.completed,
           labelId: 'study-session',
-          labelEmoji: '📚',
-          labelName: 'Study session',
         ),
       ],
     );
@@ -1209,16 +1193,15 @@ void main() {
         'Deep work',
         'Couple time',
         'Family time',
+        'Digital detox',
       ],
     );
     expect(repository.labels, isEmpty);
     final session = container.read(focusControllerProvider).sessions.single;
     expect(session.labelId, 'study-session');
-    expect(session.labelEmoji, '📚');
-    expect(session.labelName, 'Study session');
   });
 
-  test('editing a label the user created renames past sessions', () async {
+  test('editing a label leaves sessions pointing at it', () async {
     final repository = MemoryFocusRepository(
       labels: [
         FocusLabel(
@@ -1237,8 +1220,6 @@ void main() {
           stoppedAt: DateTime.utc(2026, 11, 18, 9, 30),
           outcome: SessionOutcome.completed,
           labelId: 'reading',
-          labelEmoji: '📖',
-          labelName: 'Reading',
         ),
       ],
     );
@@ -1258,117 +1239,170 @@ void main() {
       'Deep work',
       'Couple time',
       'Family time',
+      'Digital detox',
       'Homework',
     ]);
     expect(labels.last.id, 'reading');
     expect(labels.last.emoji, '✏️');
     expect(repository.labels.single.name, 'Homework');
     expect(
-      container.read(focusControllerProvider).sessions.single.labelName,
-      'Homework',
+      container.read(focusControllerProvider).sessions.single.labelId,
+      'reading',
     );
-    expect(repository.sessions.single.labelEmoji, '✏️');
+    final stats = summarizeFocus(
+      container.read(focusControllerProvider).sessions,
+      DateTime.utc(2026, 11, 18, 12),
+      labels: labels,
+    );
+    expect(stats.byLabel.single.name, 'Homework');
+    expect(stats.byLabel.single.emoji, '✏️');
   });
 
-  test(
-    'deleting a label moves its sessions to Focus Time and hides it',
-    () async {
-      final repository = MemoryFocusRepository(
-        labels: [
-          FocusLabel(
-            id: 'reading',
-            emoji: '📖',
-            name: 'Reading',
-            createdAt: DateTime.utc(2026, 11, 1),
-          ),
-        ],
-        sessions: [
-          FocusSession(
-            id: 'reading',
-            blockListId: 'social',
-            blockListName: 'Social',
-            startedAt: DateTime.utc(2026, 11, 18, 9),
-            stoppedAt: DateTime.utc(2026, 11, 18, 9, 40),
-            outcome: SessionOutcome.completed,
-            labelId: 'reading',
-            labelEmoji: '📖',
-            labelName: 'Reading',
-          ),
-          FocusSession(
-            id: 'study',
-            blockListId: 'social',
-            blockListName: 'Social',
-            startedAt: DateTime.utc(2026, 11, 18, 11),
-            stoppedAt: DateTime.utc(2026, 11, 18, 12),
-            outcome: SessionOutcome.completed,
-            labelId: 'study-session',
-            labelEmoji: '📚',
-            labelName: 'Study session',
-          ),
-          FocusSession(
-            id: 'deep',
-            blockListId: 'social',
-            blockListName: 'Social',
-            startedAt: DateTime.utc(2026, 11, 18, 13),
-            stoppedAt: DateTime.utc(2026, 11, 18, 14),
-            outcome: SessionOutcome.completed,
-            labelId: 'deep-work',
-            labelEmoji: '🧠',
-            labelName: 'Deep work',
-          ),
-        ],
-      );
-      final container = ProviderContainer(
-        overrides: [focusRepositoryProvider.overrideWithValue(repository)],
-      );
-      addTearDown(container.dispose);
-      final controller = container.read(focusControllerProvider.notifier);
+  test('a new label with the same name does not claim old sessions', () async {
+    final repository = MemoryFocusRepository(
+      labels: [
+        FocusLabel(
+          id: 'reading',
+          emoji: '📖',
+          name: 'Reading',
+          createdAt: DateTime.utc(2026, 11, 1),
+        ),
+      ],
+      sessions: [
+        FocusSession(
+          id: 'past',
+          blockListId: 'social',
+          blockListName: 'Social',
+          startedAt: DateTime.utc(2026, 11, 18, 9),
+          stoppedAt: DateTime.utc(2026, 11, 18, 9, 30),
+          outcome: SessionOutcome.completed,
+          labelId: 'reading',
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [focusRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    final controller = container.read(focusControllerProvider.notifier);
 
-      await controller.deleteLabel('reading');
+    await controller.deleteLabel('reading');
+    await controller.addLabel(emoji: '📖', name: 'Reading');
+    await controller.addLabel(emoji: '📚', name: 'Reading');
 
-      final afterCustom = container.read(focusControllerProvider);
-      expect(
-        afterCustom.labels.map((label) => label.id),
-        isNot(contains('reading')),
-      );
-      expect(repository.labels, isEmpty);
-      final moved = afterCustom.sessions.singleWhere(
-        (session) => session.id == 'reading',
-      );
-      expect(moved.labelId, focusTimeLabelId);
-      expect(moved.labelEmoji, '🎯');
-      expect(moved.labelName, 'Focus Time');
+    final state = container.read(focusControllerProvider);
+    final created = state.labels.where((label) => label.name == 'Reading');
+    expect(created, hasLength(2));
+    expect(created.map((label) => label.id).toSet(), hasLength(2));
+    expect(created.map((label) => label.id), isNot(contains('reading')));
+    expect(state.sessions.single.labelId, 'reading');
+    expect(repository.sessions.single.labelId, 'reading');
 
-      await controller.deleteLabel('study-session');
+    final stats = summarizeFocus(
+      state.sessions,
+      DateTime.utc(2026, 11, 18, 12),
+      labels: state.labels,
+    );
+    expect(stats.byLabel.single.id, focusTimeLabelId);
+    expect(stats.byLabel.single.focused, const Duration(minutes: 30));
+  });
 
-      final labels = container.read(focusControllerProvider).labels;
-      expect(labels.map((label) => label.id), [
-        focusTimeLabelId,
-        'study-session',
-        'deep-work',
-        'couple-time',
-        'family-time',
-      ]);
-      final study = container
-          .read(focusControllerProvider)
-          .sessions
-          .singleWhere((session) => session.id == 'study');
-      expect(study.labelId, 'study-session');
-      expect(study.labelName, 'Study session');
-      final deep = container
-          .read(focusControllerProvider)
-          .sessions
-          .singleWhere((session) => session.id == 'deep');
-      expect(deep.labelId, 'deep-work');
-      expect(deep.labelName, 'Deep work');
+  test('deleting a label keeps the session id and hides the label', () async {
+    final repository = MemoryFocusRepository(
+      labels: [
+        FocusLabel(
+          id: 'reading',
+          emoji: '📖',
+          name: 'Reading',
+          createdAt: DateTime.utc(2026, 11, 1),
+        ),
+      ],
+      sessions: [
+        FocusSession(
+          id: 'reading',
+          blockListId: 'social',
+          blockListName: 'Social',
+          startedAt: DateTime.utc(2026, 11, 18, 9),
+          stoppedAt: DateTime.utc(2026, 11, 18, 9, 40),
+          outcome: SessionOutcome.completed,
+          labelId: 'reading',
+        ),
+        FocusSession(
+          id: 'study',
+          blockListId: 'social',
+          blockListName: 'Social',
+          startedAt: DateTime.utc(2026, 11, 18, 11),
+          stoppedAt: DateTime.utc(2026, 11, 18, 12),
+          outcome: SessionOutcome.completed,
+          labelId: 'study-session',
+        ),
+        FocusSession(
+          id: 'deep',
+          blockListId: 'social',
+          blockListName: 'Social',
+          startedAt: DateTime.utc(2026, 11, 18, 13),
+          stoppedAt: DateTime.utc(2026, 11, 18, 14),
+          outcome: SessionOutcome.completed,
+          labelId: 'deep-work',
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [focusRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+    final controller = container.read(focusControllerProvider.notifier);
 
-      await controller.deleteLabel(focusTimeLabelId);
-      expect(
-        container.read(focusControllerProvider).labels.first.id,
-        focusTimeLabelId,
-      );
-    },
-  );
+    await controller.deleteLabel('reading');
+
+    final afterCustom = container.read(focusControllerProvider);
+    expect(
+      afterCustom.labels.map((label) => label.id),
+      isNot(contains('reading')),
+    );
+    expect(repository.labels, isEmpty);
+    final moved = afterCustom.sessions.singleWhere(
+      (session) => session.id == 'reading',
+    );
+    expect(moved.labelId, 'reading');
+    final movedStats = summarizeFocus(
+      afterCustom.sessions,
+      DateTime.utc(2026, 11, 18, 18),
+      labels: afterCustom.labels,
+    );
+    final focus = movedStats.byLabel.singleWhere(
+      (label) => label.id == focusTimeLabelId,
+    );
+    expect(focus.focused, const Duration(minutes: 40));
+
+    await controller.deleteLabel('study-session');
+
+    final labels = container.read(focusControllerProvider).labels;
+    expect(labels.map((label) => label.id), [
+      focusTimeLabelId,
+      'study-session',
+      'deep-work',
+      'couple-time',
+      'family-time',
+      'digital-detox',
+    ]);
+    final study = container
+        .read(focusControllerProvider)
+        .sessions
+        .singleWhere((session) => session.id == 'study');
+    expect(study.labelId, 'study-session');
+    final deep = container
+        .read(focusControllerProvider)
+        .sessions
+        .singleWhere((session) => session.id == 'deep');
+    expect(deep.labelId, 'deep-work');
+
+    await controller.deleteLabel(focusTimeLabelId);
+    expect(
+      container.read(focusControllerProvider).labels.first.id,
+      focusTimeLabelId,
+    );
+  });
 
   test('ending a session under a minute leaves no record', () async {
     final now = DateTime.now();
