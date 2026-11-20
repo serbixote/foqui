@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>486004582512-68b5rrvtm6a1bgv1jotooh6od4c3orfo.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.486004582512-68b5rrvtm6a1bgv1jotooh6od4c3orfo</string>
+	<key>API_KEY</key>
+	<string>AIzaSyDzjE0StHYVPn-tT4BjXqxKX0q55tUFEW4</string>
+	<key>GCM_SENDER_ID</key>
+	<string>486004582512</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>foqui.theboringbuilders.xyz</string>
+	<key>PROJECT_ID</key>
+	<string>theboringbuilders-foqui</string>
+	<key>STORAGE_BUCKET</key>
+	<string>theboringbuilders-foqui.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:486004582512:ios:325707ecbf4178998a6cb5</string>
+</dict>
+</plist>

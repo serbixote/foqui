@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "486004582512",
+    "project_id": "theboringbuilders-foqui",
+    "storage_bucket": "theboringbuilders-foqui.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:486004582512:android:6a0dac90abc8e0d28a6cb5",
+        "android_client_info": {
+          "package_name": "com.example.foqui"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBGU_turnKeAcDA8czJrAaJwpLxHUwPnnE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

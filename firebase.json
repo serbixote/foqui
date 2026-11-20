@@ -1,0 +1,33 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "theboringbuilders-foqui",
+          "appId": "1:486004582512:android:6a0dac90abc8e0d28a6cb5",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "theboringbuilders-foqui",
+          "appId": "1:486004582512:ios:2ed673c1d39d69408a6cb5",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "theboringbuilders-foqui",
+          "configurations": {
+            "android": "1:486004582512:android:6a0dac90abc8e0d28a6cb5",
+            "ios": "1:486004582512:ios:2ed673c1d39d69408a6cb5"
+          }
+        }
+      }
+    }
+  }
+}

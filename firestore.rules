@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function validUsername(name) {
+      return name is string
+        && name.matches('^[a-z][a-z0-9_]{2,19}$')
+        && !(name in [
+          'admin',
+          'foqui',
+          'help',
+          'moderator',
+          'official',
+          'support',
+          'system'
+        ]);
+    }
+
+    function validAlias(alias) {
+      return alias is string && alias.size() > 0 && alias.size() <= 40;
+    }
+
+    // Before-state of this account. Ternary short-circuits, so a missing
+    // user document does not fail the read.
+    function previousUsername() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return exists(path) ? get(path).data.get('username', '') : '';
+    }
+
+    // A rename deletes the previous username doc in the same transaction,
+    // so one account cannot keep two names. Ternaries short-circuit; || does not.
+    function releasedPrevious(username) {
+      let previous = previousUsername();
+      return previous == ''
+        ? true
+        : previous == username
+          ? true
+          : !existsAfter(/databases/$(database)/documents/usernames/$(previous));
+    }
+
+    function usernameOwned(name) {
+      let path = /databases/$(database)/documents/usernames/$(name);
+      return existsAfter(path)
+        ? getAfter(path).data.uid == request.auth.uid
+        : false;
+    }
+
+    function usernameClaimHolds() {
+      return !('username' in request.resource.data)
+        ? true
+        : validUsername(request.resource.data.username)
+          ? usernameOwned(request.resource.data.username)
+          : false;
+    }
+
+    function aliasHolds() {
+      return !('alias' in request.resource.data)
+        ? true
+        : validAlias(request.resource.data.alias);
+    }
+
+    // Document id is the username. Clients may get one name, never list
+    // the directory, so a uniqueness check stays one read.
+    match /usernames/{username} {
+      allow get: if isSignedIn();
+      allow list: if false;
+
+      allow create: if isSignedIn()
+        && validUsername(username)
+        && request.resource.data.keys().hasOnly(['uid', 'alias'])
+        && request.resource.data.uid == request.auth.uid
+        && validAlias(request.resource.data.alias)
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username
+        && releasedPrevious(username);
+
+      allow update: if isSignedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly(['uid', 'alias'])
+        && validAlias(request.resource.data.alias)
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username;
+
+      allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create, update: if isOwner(userId)
+        && usernameClaimHolds()
+        && aliasHolds();
+      allow delete: if isOwner(userId);
+
+      match /{path=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+  }
+}

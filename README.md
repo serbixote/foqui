@@ -1,17 +1,17 @@
-# foqui
+# Foqui
 
-A new Flutter project.
+Foqui runs a focus session and shields a list of apps until the timer ends.
 
-## Getting Started
+Pick the apps, categories, or websites with the system Screen Time picker, choose a length from 15 minutes to 3 hours, and start. Foqui applies a Screen Time shield immediately. A Device Activity extension removes it when the session ends, including if you have left the app. You can also end a session early.
 
-This project is a starting point for a Flutter application.
+Blocking uses Family Controls on a physical iPhone. The simulator can open the app, but it cannot shield apps.
 
-A few resources to get you started if this is your first Flutter project:
+## Screen Time setup
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Signing needs both targets, `com.example.foqui` and `com.example.foqui.FocusActivityMonitor`, plus the App Group `group.com.example.foqui`.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+1. In the Apple Developer portal, register both App IDs.
+2. Enable Family Controls and App Groups on each ID, and add `group.com.example.foqui` to both.
+3. In Xcode, confirm the Runner and FocusActivityMonitor targets use team `PPKD4UG65K` and their entitlements files.
+
+Family Controls for the App Store needs Apple's distribution approval. Development builds work once the capability is on the App ID.
