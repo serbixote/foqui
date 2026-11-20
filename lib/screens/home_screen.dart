@@ -12,6 +12,7 @@ import '../state/focus_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/floating_tab_bar.dart';
 import '../widgets/screen_header.dart';
+import '../widgets/session_bar_button.dart';
 import '../widgets/sheet_header.dart';
 import '../widgets/surface_card.dart';
 
@@ -27,6 +28,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   static const _pageSize = 10;
 
   var _shown = _pageSize;
+  var _starting = false;
 
   @override
   void initState() {
@@ -75,6 +77,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     await ref.read(authProvider.notifier).signOut();
   }
 
+  Future<void> _startSession() async {
+    if (_starting) return;
+    await beginFocusSession(
+      context,
+      ref,
+      onCommit: () {
+        if (mounted) setState(() => _starting = true);
+      },
+    );
+    if (mounted) setState(() => _starting = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(focusControllerProvider);
@@ -89,71 +103,95 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     final shown = past.take(_shown);
     final hasMore = past.length > _shown;
 
+    final chrome = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ScreenHeader(
+          title: 'Foqui',
+          subtitle: tr('home_subtitle'),
+          leading: Image.asset(
+            'assets/images/foqui.png',
+            height: 36,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+            excludeFromSemantics: true,
+          ),
+          trailing: IconButton(
+            tooltip: tr('home_sign_out'),
+            constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+            padding: EdgeInsets.zero,
+            onPressed: _confirmSignOut,
+            icon: const Icon(CupertinoIcons.square_arrow_right, size: 22),
+          ),
+        ),
+        authorization.when(
+          data: (status) => status.isAuthorized
+              ? const SizedBox.shrink()
+              : Padding(
+                  padding: const EdgeInsets.only(top: 20),
+                  child: _PermissionBanner(status: status),
+                ),
+          loading: () => const SizedBox.shrink(),
+          error: (_, _) => const Padding(
+            padding: EdgeInsets.only(top: 20),
+            child: _PermissionBanner(
+              status: FamilyControlsAuthorization.unknown,
+            ),
+          ),
+        ),
+      ],
+    );
+
     return SafeArea(
       bottom: false,
       child: Column(
         children: [
           Expanded(
-            child: ListView(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                16,
-                20,
-                hasMore ? 12 : kFloatingContentInset,
-              ),
-              children: [
-                ScreenHeader(
-                  title: 'Foqui',
-                  subtitle: tr('home_subtitle'),
-                  leading: Image.asset(
-                    'assets/images/foqui.png',
-                    height: 36,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
-                    excludeFromSemantics: true,
-                  ),
-                  trailing: IconButton(
-                    tooltip: tr('home_sign_out'),
-                    constraints: const BoxConstraints.tightFor(
-                      width: 36,
-                      height: 36,
-                    ),
-                    padding: EdgeInsets.zero,
-                    onPressed: _confirmSignOut,
-                    icon: const Icon(
-                      CupertinoIcons.square_arrow_right,
-                      size: 22,
-                    ),
-                  ),
-                ),
-                authorization.when(
-                  data: (status) => status.isAuthorized
-                      ? const SizedBox.shrink()
-                      : Padding(
-                          padding: const EdgeInsets.only(top: 20),
-                          child: _PermissionBanner(status: status),
+            child: past.isEmpty
+                ? CustomScrollView(
+                    slivers: [
+                      SliverPadding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        sliver: SliverToBoxAdapter(child: chrome),
+                      ),
+                      SliverFillRemaining(
+                        hasScrollBody: false,
+                        child: Padding(
+                          padding: kEmptyContentPadding,
+                          child: Align(
+                            alignment: kEmptyContentAlignment,
+                            child: _HomeEmpty(
+                              busy: _starting,
+                              onStart: _startSession,
+                            ),
+                          ),
                         ),
-                  loading: () => const SizedBox.shrink(),
-                  error: (_, _) => const Padding(
-                    padding: EdgeInsets.only(top: 20),
-                    child: _PermissionBanner(
-                      status: FamilyControlsAuthorization.unknown,
+                      ),
+                    ],
+                  )
+                : ListView(
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      16,
+                      20,
+                      hasMore ? 12 : kFloatingContentInset,
                     ),
-                  ),
-                ),
-                if (past.isNotEmpty) ...[
-                  const SizedBox(height: 16),
-                  _SectionHeader(title: tr('home_recent')),
-                  const SizedBox(height: 10),
-                  SurfaceGroup(
                     children: [
-                      for (final session in shown)
-                        _HistoryTile(session: session, labels: state.labels),
+                      chrome,
+                      const SizedBox(height: 16),
+                      _SectionHeader(title: tr('home_recent')),
+                      const SizedBox(height: 10),
+                      SurfaceGroup(
+                        children: [
+                          for (final session in shown)
+                            _HistoryTile(
+                              session: session,
+                              labels: state.labels,
+                            ),
+                        ],
+                      ),
                     ],
                   ),
-                ],
-              ],
-            ),
           ),
           if (hasMore)
             Padding(
@@ -235,6 +273,100 @@ class _SignOutSheet extends StatelessWidget {
 
 Future<void> finishSessionIfDue(WidgetRef ref) {
   return ref.read(focusControllerProvider.notifier).completeIfDue();
+}
+
+/// Home placeholder when nothing has finished yet.
+class _HomeEmpty extends StatelessWidget {
+  const _HomeEmpty({required this.busy, required this.onStart});
+
+  final bool busy;
+  final VoidCallback onStart;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Transform.translate(
+          // The artwork's clear space is wider on the right, so the
+          // character sits left of the box. Nudge it onto the column's axis.
+          offset: const Offset(7, 0),
+          child: Image.asset(
+            'assets/images/foqui.png',
+            height: 120,
+            fit: BoxFit.contain,
+            filterQuality: FilterQuality.high,
+            excludeFromSemantics: true,
+          ),
+        ),
+        Transform.translate(
+          // Pull the copy into the artwork's empty lower margin.
+          offset: const Offset(0, -6),
+          child: Column(
+            children: [
+              Text(
+                tr('home_empty_title'),
+                textAlign: TextAlign.center,
+                style: theme.textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 260),
+                child: Text(
+                  tr('home_empty_body'),
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    height: 1.35,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 22),
+              FilledButton(
+                onPressed: busy ? null : onStart,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 52),
+                  padding: const EdgeInsets.symmetric(horizontal: 22),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Opacity(
+                      opacity: busy ? 0 : 1,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(CupertinoIcons.play_fill, size: 16),
+                          const SizedBox(width: 8),
+                          Text(tr('home_empty_start')),
+                        ],
+                      ),
+                    ),
+                    if (busy)
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.4,
+                          color: scheme.onPrimary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 class _SectionHeader extends StatelessWidget {

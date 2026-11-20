@@ -69,54 +69,16 @@ class _SessionBarButtonState extends ConsumerState<SessionBarButton>
     }
   }
 
-  /// Screen Time has to be allowed before a session can be set up.
-  /// Unavailable covers the simulator, which still opens the session sheet.
-  Future<bool> _screenTimeReady() async {
-    var status = FamilyControlsAuthorization.unknown;
-    try {
-      status = await ref.read(authorizationProvider.future);
-    } catch (_) {
-      status = FamilyControlsAuthorization.unknown;
-    }
-    if (!mounted) return false;
-    if (status.isAuthorized ||
-        status == FamilyControlsAuthorization.unavailable) {
-      return true;
-    }
-    return showScreenTimeSheet(context);
-  }
-
   Future<void> _start() async {
-    if (!await _screenTimeReady()) return;
-    if (!mounted) return;
-    final choice = await showStartSessionSheet(context);
-    if (choice == null || !mounted) return;
-    setState(() => _busy = true);
-    try {
-      final controller = ref.read(focusControllerProvider.notifier);
-      if (choice.action == SessionSheetAction.create) {
-        await controller.createSession(
-          listId: choice.listId,
-          minutes: choice.minutes,
-          label: choice.label,
-        );
-      } else {
-        await controller.startSession(
-          listId: choice.listId,
-          minutes: choice.minutes,
-          label: choice.label,
-        );
-      }
-      HapticFeedback.mediumImpact();
-    } on FocusShieldException catch (error, stack) {
-      debugPrint('Could not start the session: $error\n$stack');
-      if (!mounted) return;
-      if (error.code == 'NOT_AUTHORIZED') {
-        await showScreenTimeSheet(context);
-      }
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
+    if (_busy) return;
+    await beginFocusSession(
+      context,
+      ref,
+      onCommit: () {
+        if (mounted) setState(() => _busy = true);
+      },
+    );
+    if (mounted) setState(() => _busy = false);
   }
 
   @override
@@ -179,6 +141,62 @@ class _SessionBarButtonState extends ConsumerState<SessionBarButton>
             )
           : button,
     );
+  }
+}
+
+/// Screen Time has to be allowed before a session can be set up.
+/// Unavailable covers the simulator, which still opens the session sheet.
+Future<bool> _screenTimeReady(BuildContext context, WidgetRef ref) async {
+  var status = FamilyControlsAuthorization.unknown;
+  try {
+    status = await ref.read(authorizationProvider.future);
+  } catch (_) {
+    status = FamilyControlsAuthorization.unknown;
+  }
+  if (!context.mounted) return false;
+  if (status.isAuthorized ||
+      status == FamilyControlsAuthorization.unavailable) {
+    return true;
+  }
+  return showScreenTimeSheet(context);
+}
+
+/// Opens the session sheet, then starts or creates what was chosen.
+///
+/// [onCommit] runs once a choice is confirmed, before the session is saved,
+/// so a button can show that the request is in flight.
+Future<void> beginFocusSession(
+  BuildContext context,
+  WidgetRef ref, {
+  VoidCallback? onCommit,
+}) async {
+  if (!await _screenTimeReady(context, ref)) return;
+  if (!context.mounted) return;
+  final choice = await showStartSessionSheet(context);
+  if (choice == null || !context.mounted) return;
+  onCommit?.call();
+  try {
+    final controller = ref.read(focusControllerProvider.notifier);
+    if (choice.action == SessionSheetAction.create) {
+      await controller.createSession(
+        listId: choice.listId,
+        minutes: choice.minutes,
+        label: choice.label,
+      );
+    } else {
+      await controller.startSession(
+        listId: choice.listId,
+        minutes: choice.minutes,
+        label: choice.label,
+      );
+    }
+    HapticFeedback.mediumImpact();
+  } on FocusShieldException catch (error, stack) {
+    debugPrint('Could not start the session: $error\n$stack');
+    if (!context.mounted) return;
+    if (error.code == 'NOT_AUTHORIZED') {
+      await showScreenTimeSheet(context);
+    }
   }
 }
 

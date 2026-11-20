@@ -12,6 +12,17 @@ const double kFloatingTabBarHeight = 62;
 /// Space under scrolling content so the last row can rest above the bar.
 const double kFloatingContentInset = 120;
 
+/// Empty content sits a little above center, clear of the floating bar.
+const kEmptyContentAlignment = Alignment(0, -0.32);
+
+/// Insets around that empty content. The bottom inset clears the bar.
+const kEmptyContentPadding = EdgeInsets.fromLTRB(
+  32,
+  8,
+  32,
+  kFloatingContentInset,
+);
+
 class FloatingTabSpec {
   const FloatingTabSpec({
     required this.label,

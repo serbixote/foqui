@@ -45,152 +45,175 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
     final sessions = ref.watch(focusControllerProvider).sessions;
     final stats = summarizeFocus(sessions, DateTime.now());
 
+    final header = ScreenHeader(
+      title: tr('stats_title'),
+      subtitle: tr('stats_subtitle'),
+    );
+
+    if (stats.sessionCount == 0) {
+      return SafeArea(
+        bottom: false,
+        child: CustomScrollView(
+          slivers: [
+            SliverPadding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              sliver: SliverToBoxAdapter(child: header),
+            ),
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: Padding(
+                padding: kEmptyContentPadding,
+                child: Align(
+                  alignment: kEmptyContentAlignment,
+                  child: EmptyState(
+                    icon: CupertinoIcons.chart_bar,
+                    message: tr('stats_empty'),
+                    messageInset: 32,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return SafeArea(
       bottom: false,
       child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, kFloatingContentInset),
         children: [
-          ScreenHeader(
-            title: tr('stats_title'),
-            subtitle: tr('stats_subtitle'),
-          ),
+          header,
           const SizedBox(height: 20),
-          if (stats.sessionCount == 0)
-            EmptyState(
-              icon: CupertinoIcons.chart_bar,
-              message: tr('stats_empty'),
-            )
-          else ...[
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: tr('stats_today'),
-                    value: formatFocusTotal(stats.today),
-                    caption: stats.todaySessions == 0
-                        ? tr('stats_nothing_yet')
-                        : _sessionsLabel(stats.todaySessions),
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricCard(
+                  label: tr('stats_today'),
+                  value: formatFocusTotal(stats.today),
+                  caption: stats.todaySessions == 0
+                      ? tr('stats_nothing_yet')
+                      : _sessionsLabel(stats.todaySessions),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _MetricCard(
-                    label: tr('stats_this_week'),
-                    value: formatFocusTotal(
-                      stats.week.fold(
-                        Duration.zero,
-                        (total, day) => total + day.focused,
-                      ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _MetricCard(
+                  label: tr('stats_this_week'),
+                  value: formatFocusTotal(
+                    stats.week.fold(
+                      Duration.zero,
+                      (total, day) => total + day.focused,
                     ),
-                    caption: _weekCaption(stats),
                   ),
+                  caption: _weekCaption(stats),
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: tr('stats_streak'),
-                    value: _daysLabel(stats.streakDays),
-                    caption: stats.streakDays == 0
-                        ? tr('stats_no_streak')
-                        : stats.streakIncludesToday
-                        ? tr('stats_streak_today')
-                        : tr('stats_streak_yesterday'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _MetricCard(
-                    label: tr('stats_stayed'),
-                    value: _stayedValue(stats),
-                    caption: _stayedCaption(stats),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            _SectionHeader(title: tr('stats_last_7_days')),
-            const SizedBox(height: 10),
-            _WeekChart(days: stats.week),
-            if (stats.byLabel.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _SectionHeader(title: tr('stats_by_label')),
-              const SizedBox(height: 10),
-              SurfaceGroup(
-                children: [
-                  for (final label in stats.byLabel)
-                    _ShareTile(
-                      emoji: label.emoji,
-                      title: localizedLabelName(id: label.id, name: label.name),
-                      detail: _sessionsLabel(label.sessions),
-                      value: formatFocusTotal(label.focused),
-                      share: _share(label.focused, stats.byLabel.first.focused),
-                    ),
-                ],
               ),
             ],
-            if (stats.byList.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _SectionHeader(title: tr('stats_by_list')),
-              const SizedBox(height: 10),
-              SurfaceGroup(
-                children: [
-                  for (final list in stats.byList)
-                    _ShareTile(
-                      title: blockListTitle(id: list.id, name: list.name),
-                      detail: _sessionsLabel(list.sessions),
-                      value: formatFocusTotal(list.focused),
-                      share: _share(list.focused, stats.byList.first.focused),
-                    ),
-                ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricCard(
+                  label: tr('stats_streak'),
+                  value: _daysLabel(stats.streakDays),
+                  caption: stats.streakDays == 0
+                      ? tr('stats_no_streak')
+                      : stats.streakIncludesToday
+                      ? tr('stats_streak_today')
+                      : tr('stats_streak_yesterday'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _MetricCard(
+                  label: tr('stats_stayed'),
+                  value: _stayedValue(stats),
+                  caption: _stayedCaption(stats),
+                ),
               ),
             ],
+          ),
+          const SizedBox(height: 16),
+          _SectionHeader(title: tr('stats_last_7_days')),
+          const SizedBox(height: 10),
+          _WeekChart(days: stats.week),
+          if (stats.byLabel.isNotEmpty) ...[
             const SizedBox(height: 16),
-            _SectionHeader(title: tr('stats_all_time')),
+            _SectionHeader(title: tr('stats_by_label')),
             const SizedBox(height: 10),
             SurfaceGroup(
               children: [
-                _StatRow(
-                  label: tr('stats_total_focused'),
-                  value: formatFocusTotal(stats.focused),
-                ),
-                _StatRow(
-                  label: tr('stats_sessions'),
-                  value: '${stats.sessionCount}',
-                ),
-                _StatRow(
-                  label: tr('stats_finished'),
-                  value: '${stats.finishedCount}',
-                ),
-                _StatRow(
-                  label: tr('stats_ended_early'),
-                  value: '${stats.endedEarlyCount}',
-                ),
-                _StatRow(
-                  label: tr('stats_longest'),
-                  value: formatFocusTotal(stats.longest),
-                ),
-                if (stats.focused > Duration.zero)
-                  _StatRow(
-                    label: tr('stats_average'),
-                    value: formatFocusTotal(stats.average),
-                  ),
-                if (stats.givenBack > Duration.zero)
-                  _StatRow(
-                    label: tr('stats_given_back'),
-                    value: formatFocusTotal(stats.givenBack),
-                  ),
-                if (stats.bestDay case final best?)
-                  _StatRow(
-                    label: tr('stats_best_day'),
-                    value: _bestDayLabel(best),
+                for (final label in stats.byLabel)
+                  _ShareTile(
+                    emoji: label.emoji,
+                    title: localizedLabelName(id: label.id, name: label.name),
+                    detail: _sessionsLabel(label.sessions),
+                    value: formatFocusTotal(label.focused),
+                    share: _share(label.focused, stats.byLabel.first.focused),
                   ),
               ],
             ),
           ],
+          if (stats.byList.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _SectionHeader(title: tr('stats_by_list')),
+            const SizedBox(height: 10),
+            SurfaceGroup(
+              children: [
+                for (final list in stats.byList)
+                  _ShareTile(
+                    title: blockListTitle(id: list.id, name: list.name),
+                    detail: _sessionsLabel(list.sessions),
+                    value: formatFocusTotal(list.focused),
+                    share: _share(list.focused, stats.byList.first.focused),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 16),
+          _SectionHeader(title: tr('stats_all_time')),
+          const SizedBox(height: 10),
+          SurfaceGroup(
+            children: [
+              _StatRow(
+                label: tr('stats_total_focused'),
+                value: formatFocusTotal(stats.focused),
+              ),
+              _StatRow(
+                label: tr('stats_sessions'),
+                value: '${stats.sessionCount}',
+              ),
+              _StatRow(
+                label: tr('stats_finished'),
+                value: '${stats.finishedCount}',
+              ),
+              _StatRow(
+                label: tr('stats_ended_early'),
+                value: '${stats.endedEarlyCount}',
+              ),
+              _StatRow(
+                label: tr('stats_longest'),
+                value: formatFocusTotal(stats.longest),
+              ),
+              if (stats.focused > Duration.zero)
+                _StatRow(
+                  label: tr('stats_average'),
+                  value: formatFocusTotal(stats.average),
+                ),
+              if (stats.givenBack > Duration.zero)
+                _StatRow(
+                  label: tr('stats_given_back'),
+                  value: formatFocusTotal(stats.givenBack),
+                ),
+              if (stats.bestDay case final best?)
+                _StatRow(
+                  label: tr('stats_best_day'),
+                  value: _bestDayLabel(best),
+                ),
+            ],
+          ),
         ],
       ),
     );

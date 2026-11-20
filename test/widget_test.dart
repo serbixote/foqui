@@ -75,8 +75,24 @@ void main() {
     expect(find.text('Foqui'), findsOneWidget);
     expect(
       find.image(const AssetImage('assets/images/foqui.png')),
+      findsNWidgets(2),
+    );
+    expect(find.text('No sessions yet'), findsOneWidget);
+    expect(find.text('Start one and it will show up here.'), findsOneWidget);
+    expect(
+      find.widgetWithText(FilledButton, 'Start a session'),
       findsOneWidget,
     );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Start a session'));
+    await pumpTransitions(tester);
+    expect(find.text('Duration'), findsOneWidget);
+    Navigator.of(
+      tester.element(find.text('Duration')),
+      rootNavigator: true,
+    ).pop();
+    await pumpTransitions(tester);
+    expect(find.text('Duration'), findsNothing);
     expect(find.byTooltip('Home'), findsOneWidget);
     expect(find.byTooltip('Stats'), findsOneWidget);
     expect(find.byTooltip('Friends'), findsOneWidget);
@@ -581,6 +597,8 @@ void main() {
 
     expect(find.text('💡 Homework'), findsOneWidget);
     expect(find.text('📚 Study session'), findsNothing);
+    expect(find.text('Recent sessions'), findsOneWidget);
+    expect(find.text('No sessions yet'), findsNothing);
   });
 
   testWidgets('a removed label leaves Focus Time on recent sessions', (
@@ -1770,7 +1788,9 @@ void main() {
           participantsProvider.overrideWith(
             (ref, sessionId) => Stream.value(members),
           ),
-          pauseRequestProvider.overrideWith((ref, sessionId) => requests.stream),
+          pauseRequestProvider.overrideWith(
+            (ref, sessionId) => requests.stream,
+          ),
         ],
         child: const FoquiApp(),
       ),
