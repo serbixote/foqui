@@ -419,7 +419,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 showSignOut: index == 0,
                 busy: _busy,
                 onBack: () => _goTo(index - 1),
-                onSignOut: () => ref.read(authProvider.notifier).signOut(),
+                onSignOut: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  ref.read(authProvider.notifier).signOut();
+                },
               ),
               const SizedBox(height: 12),
               _StepDots(index: index, count: steps.length),

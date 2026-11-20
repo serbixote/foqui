@@ -68,104 +68,122 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
     final sceneLabel = tr(scene.labelKey);
 
     return Scaffold(
+      // Onboarding signs out with the keyboard still open. This screen has
+      // no fields, so that inset should not squash the column.
+      resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(28, 88, 28, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Text(
-                'Foqui',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.displaySmall?.copyWith(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1.2,
-                  height: 1.05,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Semantics(
-                container: true,
-                liveRegion: true,
-                label: tr('sign_in_blocks_named', args: [sceneLabel]),
-                child: ExcludeSemantics(
-                  child: Column(
-                    children: [
-                      Text(
-                        tr('sign_in_blocks'),
-                        textAlign: TextAlign.center,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                          fontWeight: FontWeight.w500,
-                          height: 1.3,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                physics: const ClampingScrollPhysics(),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Text(
+                          'Foqui',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.displaySmall?.copyWith(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -1.2,
+                            height: 1.05,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      SizedBox(
-                        height: 64,
-                        width: double.infinity,
-                        child: _FocusSwitch(
-                          sceneKey: ValueKey(scene.labelKey),
-                          slide: const Offset(0, 0.45),
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              sceneLabel,
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.displayMedium?.copyWith(
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: -1,
-                                color: theme.colorScheme.primary,
-                                height: 1,
+                        const SizedBox(height: 20),
+                        Semantics(
+                          container: true,
+                          liveRegion: true,
+                          label: tr('sign_in_blocks_named', args: [sceneLabel]),
+                          child: ExcludeSemantics(
+                            child: Column(
+                              children: [
+                                Text(
+                                  tr('sign_in_blocks'),
+                                  textAlign: TextAlign.center,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.3,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                SizedBox(
+                                  height: 64,
+                                  width: double.infinity,
+                                  child: _FocusSwitch(
+                                    sceneKey: ValueKey(scene.labelKey),
+                                    slide: const Offset(0, 0.45),
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        sceneLabel,
+                                        textAlign: TextAlign.center,
+                                        style: theme.textTheme.displayMedium
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: -1,
+                                              color: theme.colorScheme.primary,
+                                              height: 1,
+                                            ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          height: 168,
+                          width: double.infinity,
+                          child: ClipRect(
+                            child: _FocusSwitch(
+                              sceneKey: ValueKey(scene.image),
+                              child: Image.asset(
+                                scene.image,
+                                fit: BoxFit.contain,
+                                alignment: Alignment.topCenter,
+                                excludeFromSemantics: true,
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 168,
-                width: double.infinity,
-                child: ClipRect(
-                  child: _FocusSwitch(
-                    sceneKey: ValueKey(scene.image),
-                    child: Image.asset(
-                      scene.image,
-                      fit: BoxFit.contain,
-                      alignment: Alignment.topCenter,
-                      excludeFromSemantics: true,
+                        const Spacer(),
+                        const SizedBox(height: 16),
+                        AnimatedOpacity(
+                          duration: const Duration(milliseconds: 150),
+                          opacity: _busy ? 0.5 : 1,
+                          child: FilledButton(
+                            onPressed: _busy ? null : _start,
+                            style: FilledButton.styleFrom(
+                              disabledBackgroundColor:
+                                  theme.colorScheme.primary,
+                              disabledForegroundColor:
+                                  theme.colorScheme.onPrimary,
+                            ),
+                            child: _busy
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: theme.colorScheme.onPrimary,
+                                    ),
+                                  )
+                                : Text(tr('sign_in_start')),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ),
-              const Spacer(),
-              const SizedBox(height: 16),
-              AnimatedOpacity(
-                duration: const Duration(milliseconds: 150),
-                opacity: _busy ? 0.5 : 1,
-                child: FilledButton(
-                  onPressed: _busy ? null : _start,
-                  style: FilledButton.styleFrom(
-                    disabledBackgroundColor: theme.colorScheme.primary,
-                    disabledForegroundColor: theme.colorScheme.onPrimary,
-                  ),
-                  child: _busy
-                      ? SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: theme.colorScheme.onPrimary,
-                          ),
-                        )
-                      : Text(tr('sign_in_start')),
-                ),
-              ),
-            ],
+              );
+            },
           ),
         ),
       ),
