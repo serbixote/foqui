@@ -3,16 +3,18 @@ import 'package:flutter/material.dart';
 
 /// Always-dark translation of Billy and Tidify, with Foqui's purple accent.
 ///
-/// Surfaces stay black canvas and gray cards. The highlight is the previous
-/// violet: strong enough to mark the main actions, short of the bright glow.
+/// The canvas is charcoal, not pure black. Cards and sheets sit one step
+/// lighter so they still separate from the screen. The highlight is the
+/// previous violet: strong enough to mark the main actions, short of the
+/// bright glow.
 abstract final class FoquiColors {
   static const violet = Color(0xFF8154E8);
   static const destructive = Color(0xFFFF453A);
-  static const canvas = Color(0xFF000000);
-  static const surface = Color(0xFF1C1C1E);
-  static const grouped = Color(0xFF2C2C2E);
-  static const raised = Color(0xFF3A3A3C);
-  static const separator = Color(0xFF38383A);
+  static const canvas = Color(0xFF1C1C1E);
+  static const surface = Color(0xFF2C2C2E);
+  static const grouped = Color(0xFF3A3A3C);
+  static const raised = Color(0xFF48484A);
+  static const separator = Color(0xFF48484A);
   static const secondaryLabel = Color(0xFF8E8E93);
   static const hairline = Color(0x14FFFFFF);
 }

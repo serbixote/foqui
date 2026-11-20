@@ -337,6 +337,31 @@ void main() {
     );
   });
 
+  test('pause is allowed only after five minutes', () {
+    final start = DateTime(2026, 11, 18, 9);
+    final running = FocusSession(
+      id: 'live',
+      blockListId: 'list',
+      blockListName: 'Work',
+      startedAt: start,
+      endsAt: start.add(const Duration(minutes: 25)),
+      outcome: SessionOutcome.active,
+    );
+
+    expect(
+      canPauseSession(running, start.add(const Duration(minutes: 4))),
+      isFalse,
+    );
+    expect(canPauseSession(running, start.add(minimumRecordedLength)), isFalse);
+    expect(
+      canPauseSession(
+        running,
+        start.add(minimumRecordedLength + const Duration(milliseconds: 1)),
+      ),
+      isTrue,
+    );
+  });
+
   test('focus stats are empty without sessions', () {
     final stats = summarizeFocus(const [], DateTime(2026, 11, 11, 12));
 
@@ -841,13 +866,19 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     await Future<void>.delayed(Duration.zero);
 
-    final list = container.read(focusControllerProvider).lists.single;
+    final list = container
+        .read(focusControllerProvider)
+        .lists
+        .singleWhere((item) => item.id == 'social');
     expect(container.read(focusControllerProvider).selectionsReady, isTrue);
     expect(list.name, 'Social');
     expect(list.isFavorite, isTrue);
     expect(list.isEmpty, isTrue);
     expect(list.applicationNames, isEmpty);
-    expect(repository.lists.single.isEmpty, isTrue);
+    expect(
+      repository.lists.singleWhere((item) => item.id == 'social').isEmpty,
+      isTrue,
+    );
   });
 
   test('Screen Time must be allowed before a session starts', () async {
@@ -886,6 +917,98 @@ void main() {
     expect(container.read(focusControllerProvider).activeSession, isNull);
     expect(repository.sessions, isEmpty);
   });
+
+  test(
+    'every account has a block list that starts as the preferred one',
+    () async {
+      final repository = MemoryFocusRepository();
+      final container = ProviderContainer(
+        overrides: [focusRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+
+      final lists = container.read(focusControllerProvider).lists;
+      expect(lists.single.id, defaultBlockListId);
+      expect(lists.single.isFavorite, isTrue);
+      await Future<void>.delayed(Duration.zero);
+      expect(repository.lists.single.id, defaultBlockListId);
+
+      await container
+          .read(focusControllerProvider.notifier)
+          .deleteList(defaultBlockListId);
+      expect(
+        container.read(focusControllerProvider).lists.single.id,
+        defaultBlockListId,
+      );
+    },
+  );
+
+  test('the preferred list is the one a join preselects', () {
+    final updated = DateTime.utc(2026, 1, 1);
+    BlockList list(String id, {bool favorite = false, int apps = 1}) {
+      return BlockList(
+        id: id,
+        name: id,
+        applicationCount: apps,
+        categoryCount: 0,
+        webDomainCount: 0,
+        updatedAt: updated,
+        isFavorite: favorite,
+      );
+    }
+
+    expect(
+      preferredJoinListId([
+        list(defaultBlockListId, favorite: true),
+        list('work'),
+      ]),
+      defaultBlockListId,
+    );
+    expect(
+      preferredJoinListId([
+        list(defaultBlockListId),
+        list('work', favorite: true),
+      ]),
+      'work',
+    );
+    expect(
+      preferredJoinListId([
+        list(defaultBlockListId, favorite: true, apps: 0),
+        list('work'),
+      ]),
+      'work',
+    );
+  });
+
+  test(
+    'deleting the preferred list makes the account list preferred',
+    () async {
+      final updated = DateTime.utc(2026, 11, 7);
+      final repository = MemoryFocusRepository(
+        lists: [
+          BlockList(
+            id: 'work',
+            name: 'Work',
+            applicationCount: 1,
+            categoryCount: 0,
+            webDomainCount: 0,
+            updatedAt: updated,
+            isFavorite: true,
+          ),
+        ],
+      );
+      final container = ProviderContainer(
+        overrides: [focusRepositoryProvider.overrideWithValue(repository)],
+      );
+      addTearDown(container.dispose);
+
+      await container.read(focusControllerProvider.notifier).deleteList('work');
+
+      final lists = container.read(focusControllerProvider).lists;
+      expect(lists.single.id, defaultBlockListId);
+      expect(lists.single.isFavorite, isTrue);
+    },
+  );
 
   test('only one block list can be the default', () async {
     final updated = DateTime.utc(2026, 11, 7);
@@ -948,6 +1071,75 @@ void main() {
       'Socials',
     );
     expect(repository.lists.where((list) => list.isFavorite).length, 1);
+  });
+
+  test('a new block list is kept after the ones already there', () async {
+    final older = DateTime.utc(2026, 1, 1);
+    final repository = MemoryFocusRepository(
+      lists: [
+        BlockList(
+          id: defaultBlockListId,
+          name: defaultBlockListName,
+          applicationCount: 0,
+          categoryCount: 0,
+          webDomainCount: 0,
+          updatedAt: older,
+          isFavorite: true,
+        ),
+        BlockList(
+          id: 'work',
+          name: 'Work',
+          applicationCount: 1,
+          categoryCount: 0,
+          webDomainCount: 0,
+          updatedAt: older.add(const Duration(days: 1)),
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [focusRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(focusControllerProvider.notifier);
+    await controller.upsertList(
+      BlockList(
+        id: 'social',
+        name: 'Social',
+        applicationCount: 1,
+        categoryCount: 0,
+        webDomainCount: 0,
+        updatedAt: DateTime.utc(2026, 6, 1),
+      ),
+    );
+
+    expect(
+      container.read(focusControllerProvider).lists.map((list) => list.id),
+      [defaultBlockListId, 'work', 'social'],
+    );
+
+    await controller.upsertList(
+      BlockList(
+        id: 'work',
+        name: 'Office',
+        applicationCount: 1,
+        categoryCount: 0,
+        webDomainCount: 0,
+        updatedAt: DateTime.utc(2026, 12, 1),
+      ),
+    );
+
+    final lists = container.read(focusControllerProvider).lists;
+    expect(lists.map((list) => list.id), [
+      defaultBlockListId,
+      'work',
+      'social',
+    ]);
+    expect(lists.map((list) => list.name), [
+      defaultBlockListName,
+      'Office',
+      'Social',
+    ]);
   });
 
   test('a created label is kept after the built-in ones', () async {
@@ -1026,60 +1218,57 @@ void main() {
     expect(session.labelName, 'Study session');
   });
 
-  test(
-    'editing a label the user created renames past sessions',
-    () async {
-      final repository = MemoryFocusRepository(
-        labels: [
-          FocusLabel(
-            id: 'reading',
-            emoji: '📖',
-            name: 'Reading',
-            createdAt: DateTime.utc(2026, 11, 1),
-          ),
-        ],
-        sessions: [
-          FocusSession(
-            id: 'reading',
-            blockListId: 'social',
-            blockListName: 'Social',
-            startedAt: DateTime.utc(2026, 11, 18, 9),
-            stoppedAt: DateTime.utc(2026, 11, 18, 9, 30),
-            outcome: SessionOutcome.completed,
-            labelId: 'reading',
-            labelEmoji: '📖',
-            labelName: 'Reading',
-          ),
-        ],
-      );
-      final container = ProviderContainer(
-        overrides: [focusRepositoryProvider.overrideWithValue(repository)],
-      );
-      addTearDown(container.dispose);
+  test('editing a label the user created renames past sessions', () async {
+    final repository = MemoryFocusRepository(
+      labels: [
+        FocusLabel(
+          id: 'reading',
+          emoji: '📖',
+          name: 'Reading',
+          createdAt: DateTime.utc(2026, 11, 1),
+        ),
+      ],
+      sessions: [
+        FocusSession(
+          id: 'reading',
+          blockListId: 'social',
+          blockListName: 'Social',
+          startedAt: DateTime.utc(2026, 11, 18, 9),
+          stoppedAt: DateTime.utc(2026, 11, 18, 9, 30),
+          outcome: SessionOutcome.completed,
+          labelId: 'reading',
+          labelEmoji: '📖',
+          labelName: 'Reading',
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [focusRepositoryProvider.overrideWithValue(repository)],
+    );
+    addTearDown(container.dispose);
 
-      await container
-          .read(focusControllerProvider.notifier)
-          .updateLabel(id: 'reading', emoji: '✏️', name: 'homework');
+    await container
+        .read(focusControllerProvider.notifier)
+        .updateLabel(id: 'reading', emoji: '✏️', name: 'homework');
 
-      final labels = container.read(focusControllerProvider).labels;
-      expect(labels.map((label) => label.name), [
-        'Focus Time',
-        'Study session',
-        'Deep work',
-        'Couple time',
-        'Family time',
-        'Homework',
-      ]);
-      expect(labels.last.id, 'reading');
-      expect(labels.last.emoji, '✏️');
-      expect(repository.labels.single.name, 'Homework');
-      expect(
-        container.read(focusControllerProvider).sessions.single.labelName,
-        'Homework',
-      );
-      expect(repository.sessions.single.labelEmoji, '✏️');
-    },
-  );
+    final labels = container.read(focusControllerProvider).labels;
+    expect(labels.map((label) => label.name), [
+      'Focus Time',
+      'Study session',
+      'Deep work',
+      'Couple time',
+      'Family time',
+      'Homework',
+    ]);
+    expect(labels.last.id, 'reading');
+    expect(labels.last.emoji, '✏️');
+    expect(repository.labels.single.name, 'Homework');
+    expect(
+      container.read(focusControllerProvider).sessions.single.labelName,
+      'Homework',
+    );
+    expect(repository.sessions.single.labelEmoji, '✏️');
+  });
 
   test(
     'deleting a label moves its sessions to Focus Time and hides it',
@@ -1293,7 +1482,8 @@ void main() {
     expect(repository.sessions.single.id, 'kept');
   });
 
-  test('pausing holds the clock and resuming continues it', () async {
+  test('a session under five minutes cannot be paused', () async {
+    final now = DateTime.now();
     final repository = MemoryFocusRepository(
       lists: [
         BlockList(
@@ -1305,6 +1495,100 @@ void main() {
           updatedAt: DateTime.utc(2026, 1, 1),
         ),
       ],
+      sessions: [
+        FocusSession(
+          id: 'live',
+          blockListId: 'social',
+          blockListName: 'Social',
+          startedAt: now.subtract(const Duration(minutes: 4)),
+          endsAt: now.add(const Duration(minutes: 21)),
+          outcome: SessionOutcome.active,
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        focusRepositoryProvider.overrideWithValue(repository),
+        focusShieldBridgeProvider.overrideWithValue(_ApprovingShield()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(focusControllerProvider.notifier);
+    await controller.pauseSession();
+    await controller.pauseFromGroup();
+
+    final state = container.read(focusControllerProvider);
+    expect(state.activeSession, isNotNull);
+    expect(state.pausedSession, isNull);
+    expect(repository.sessions.single.outcome, SessionOutcome.active);
+  });
+
+  test('an agreed group pause holds the clock before five minutes', () async {
+    final now = DateTime.now();
+    final repository = MemoryFocusRepository(
+      lists: [
+        BlockList(
+          id: 'social',
+          name: 'Social',
+          applicationCount: 1,
+          categoryCount: 0,
+          webDomainCount: 0,
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      ],
+      sessions: [
+        FocusSession(
+          id: 'live',
+          blockListId: 'social',
+          blockListName: 'Social',
+          startedAt: now.subtract(const Duration(minutes: 2)),
+          endsAt: now.add(const Duration(minutes: 23)),
+          outcome: SessionOutcome.active,
+          sharedSessionId: 'room',
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        focusRepositoryProvider.overrideWithValue(repository),
+        focusShieldBridgeProvider.overrideWithValue(_ApprovingShield()),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(focusControllerProvider.notifier).pauseFromGroup();
+
+    expect(
+      container.read(focusControllerProvider).foregroundSession?.outcome,
+      SessionOutcome.paused,
+    );
+    expect(repository.sessions.single.outcome, SessionOutcome.paused);
+  });
+
+  test('pausing holds the clock and resuming continues it', () async {
+    final startedAt = DateTime.now().subtract(const Duration(minutes: 6));
+    final repository = MemoryFocusRepository(
+      lists: [
+        BlockList(
+          id: 'social',
+          name: 'Social',
+          applicationCount: 1,
+          categoryCount: 0,
+          webDomainCount: 0,
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      ],
+      sessions: [
+        FocusSession(
+          id: 'live',
+          blockListId: 'social',
+          blockListName: 'Social',
+          startedAt: startedAt,
+          endsAt: startedAt.add(const Duration(minutes: 25)),
+          outcome: SessionOutcome.active,
+        ),
+      ],
     );
     final container = ProviderContainer(
       overrides: [
@@ -1314,7 +1598,6 @@ void main() {
     );
     addTearDown(container.dispose);
     final controller = container.read(focusControllerProvider.notifier);
-    await controller.startSession(listId: 'social', minutes: 25);
 
     final running = container.read(focusControllerProvider).activeSession!;
     await controller.pauseSession();

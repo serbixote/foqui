@@ -4,12 +4,18 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../l10n/tr.dart';
+import '../models/block_list.dart';
 import '../models/focus_label.dart';
 import '../models/focus_session.dart';
+import '../models/shared_session.dart';
+import '../repositories/invite.dart';
 import '../screens/end_session_sheet.dart';
 import '../screens/screen_time_sheet.dart';
+import '../screens/shared_session_sheets.dart';
+import '../state/auth.dart';
 import '../services/focus_shield_bridge.dart';
 import '../state/focus_controller.dart';
 import '../theme/app_theme.dart';
@@ -17,7 +23,7 @@ import 'sheet_header.dart';
 
 const _liveGreen = Color(0xFF30D158);
 
-/// People in the session. Shared sessions will replace this list.
+/// Shown until a shared room has published its members.
 List<String> get _sessionMembers => [tr('session_you')];
 
 /// Session sheet over the app.
@@ -51,6 +57,7 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
   var _open = false;
   var _busy = false;
   var _pausing = false;
+  String? _appliedGroupPause;
 
   @override
   void initState() {
@@ -148,7 +155,11 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
     }
   }
 
-  Future<void> _pause(FocusSession session) async {
+  Future<void> _pause(FocusSession session, {required bool group}) async {
+    if (group && session.outcome != SessionOutcome.paused) {
+      final confirmed = await showPauseRequestSheet(context);
+      if (!confirmed || !mounted) return;
+    }
     setState(() {
       _busy = true;
       _pausing = true;
@@ -157,6 +168,8 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
       final controller = ref.read(focusControllerProvider.notifier);
       if (session.outcome == SessionOutcome.paused) {
         await controller.resumeSession();
+      } else if (group) {
+        await controller.requestSharedPause();
       } else {
         await controller.pauseSession();
       }
@@ -175,6 +188,62 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
         });
       }
     }
+  }
+
+  Future<void> _leave(FocusSession session) async {
+    final confirmed = await showLeaveSessionSheet(context);
+    if (!confirmed || !mounted) return;
+    final userId = ref.read(authProvider).userId;
+    final request = ref
+        .read(pauseRequestProvider(session.sharedSessionId ?? ''))
+        .asData
+        ?.value;
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(focusControllerProvider.notifier)
+          .leaveSession(
+            cancelPause: request != null && request.requestedBy == userId,
+          );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _vote({required bool accept}) async {
+    setState(() => _busy = true);
+    try {
+      final controller = ref.read(focusControllerProvider.notifier);
+      if (accept) {
+        await controller.acceptSharedPause();
+      } else {
+        await controller.declineSharedPause();
+      }
+      HapticFeedback.mediumImpact();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _applyGroupPause(String sharedId) {
+    if (sharedId.isEmpty || !mounted) return;
+    final request = ref.read(pauseRequestProvider(sharedId)).asData?.value;
+    final members = ref.read(participantsProvider(sharedId)).asData?.value;
+    if (request == null || members == null) {
+      _appliedGroupPause = null;
+      return;
+    }
+    if (!pauseRequestAcceptedByAll(request, members)) return;
+    final session = ref.read(focusControllerProvider).activeSession;
+    if (session == null || session.sharedSessionId != sharedId) return;
+    final key = _pauseKey(request);
+    if (_appliedGroupPause == key) return;
+    _appliedGroupPause = key;
+    unawaited(ref.read(focusControllerProvider.notifier).pauseFromGroup());
+  }
+
+  String _pauseKey(PauseRequest request) {
+    return '${request.requestedBy}:${request.createdAt?.millisecondsSinceEpoch ?? 0}';
   }
 
   Future<void> _end() async {
@@ -197,6 +266,26 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
     ref.listen(focusControllerProvider, (previous, next) {
       _sync(next.foregroundSession);
     });
+    final sharedId = session?.sharedSessionId ?? '';
+    ref.listen(sharedSessionProvider(sharedId), (previous, next) {
+      final shared = next.asData?.value;
+      final current = ref.read(focusControllerProvider).foregroundSession;
+      if (shared == null || current == null || current.sharedHost) return;
+      if (current.sharedSessionId != shared.id) return;
+      final endsAt = shared.endsAt;
+      final due = endsAt != null && !endsAt.isAfter(DateTime.now());
+      if (shared.status == SharedSessionStatus.ended || due) {
+        unawaited(ref.read(focusControllerProvider.notifier).endFromShared());
+      }
+    });
+    final members = ref.watch(participantsProvider(sharedId));
+    final request = ref.watch(pauseRequestProvider(sharedId)).asData?.value;
+    ref.listen(pauseRequestProvider(sharedId), (_, _) {
+      _applyGroupPause(sharedId);
+    });
+    ref.listen(participantsProvider(sharedId), (_, _) {
+      _applyGroupPause(sharedId);
+    });
 
     if (session == null) return const SizedBox.shrink();
 
@@ -206,6 +295,21 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
     final paused = session.outcome == SessionOutcome.paused;
     final progress = _progress(session, shownAt);
     final running = !waiting && !paused;
+    final people = members.asData?.value ?? const <SessionParticipant>[];
+    final group = session.sharedSessionId != null && people.length > 1;
+    final agreed =
+        request != null && pauseRequestAcceptedByAll(request, people);
+    final voteOpen = group && !waiting && !paused && request != null && !agreed;
+    if (group && !waiting && agreed) {
+      final key = _pauseKey(request);
+      if (_appliedGroupPause != key) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          _applyGroupPause(sharedId);
+        });
+      }
+    }
+    final userId = ref.watch(authProvider).userId ?? '';
 
     return Semantics(
       container: true,
@@ -214,7 +318,7 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
         args: [
           _labelName(session, labels),
           session.outcomeLabel,
-          session.blockListName,
+          blockListTitle(id: session.blockListId, name: session.blockListName),
         ],
       ),
       child: Material(
@@ -236,7 +340,12 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _BlockingCard(name: session.blockListName),
+                    _BlockingCard(
+                      name: blockListTitle(
+                        id: session.blockListId,
+                        name: session.blockListName,
+                      ),
+                    ),
                     const SizedBox(height: 22),
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -288,24 +397,59 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-                  children: [_MemberList(names: _sessionMembers)],
+                  children: [
+                    _MemberList(
+                      names: _namesFor(session, members),
+                      session: session,
+                    ),
+                  ],
                 ),
               ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: waiting
-                    ? _WaitingActions(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (voteOpen) ...[
+                      _PauseVote(
+                        request: request,
+                        userId: userId,
                         busy: _busy,
-                        onStart: () => _begin(session),
-                        onCancel: () => _cancel(session),
-                      )
-                    : _RunningActions(
-                        busy: _busy,
-                        pausing: _pausing,
-                        paused: paused,
-                        onPause: () => _pause(session),
-                        onStop: _end,
+                        onAccept: () => _vote(accept: true),
+                        onDecline: () => _vote(accept: false),
                       ),
+                      const SizedBox(height: 12),
+                    ],
+                    waiting
+                        ? _WaitingActions(
+                            busy: _busy,
+                            onStart: () => _begin(session),
+                            onCancel: () => _cancel(session),
+                          )
+                        : _RunningActions(
+                            busy: _busy,
+                            pausing: _pausing,
+                            paused: paused,
+                            canPause:
+                                !voteOpen &&
+                                (paused || canPauseSession(session, now)),
+                            pauseMessage: voteOpen
+                                ? tr('pause_request_waiting')
+                                : null,
+                            onPause: () => _pause(session, group: group),
+                            onStop: group ? () => _leave(session) : _end,
+                            stopLabel: group
+                                ? tr('session_leave')
+                                : tr('session_stop'),
+                            stopTooltip: group
+                                ? tr('session_leave_action')
+                                : tr('end_confirm'),
+                            stopIcon: group
+                                ? CupertinoIcons.person_crop_circle_badge_minus
+                                : CupertinoIcons.stop_fill,
+                          ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -367,15 +511,25 @@ class _RunningActions extends StatelessWidget {
     required this.busy,
     required this.pausing,
     required this.paused,
+    required this.canPause,
+    required this.pauseMessage,
     required this.onPause,
     required this.onStop,
+    required this.stopLabel,
+    required this.stopTooltip,
+    required this.stopIcon,
   });
 
   final bool busy;
   final bool pausing;
   final bool paused;
+  final bool canPause;
+  final String? pauseMessage;
   final VoidCallback onPause;
   final VoidCallback onStop;
+  final String stopLabel;
+  final String stopTooltip;
+  final IconData stopIcon;
 
   @override
   Widget build(BuildContext context) {
@@ -384,11 +538,18 @@ class _RunningActions extends StatelessWidget {
       children: [
         Expanded(
           child: Tooltip(
-            message: paused
-                ? tr('session_resume_action')
-                : tr('session_pause_action'),
+            message:
+                pauseMessage ??
+                (paused
+                    ? tr('session_resume_action')
+                    : canPause
+                    ? tr('session_pause_action')
+                    : tr(
+                        'session_pause_wait',
+                        args: ['${minimumRecordedLength.inMinutes}'],
+                      )),
             child: FilledButton.icon(
-              onPressed: busy ? null : onPause,
+              onPressed: busy || !canPause ? null : onPause,
               style: FilledButton.styleFrom(
                 backgroundColor: FoquiColors.raised,
                 foregroundColor: scheme.onSurface,
@@ -418,7 +579,7 @@ class _RunningActions extends StatelessWidget {
         const SizedBox(width: 12),
         Expanded(
           child: Tooltip(
-            message: tr('end_confirm'),
+            message: stopTooltip,
             child: FilledButton.icon(
               onPressed: busy ? null : onStop,
               style: FilledButton.styleFrom(
@@ -439,12 +600,82 @@ class _RunningActions extends StatelessWidget {
                         color: Colors.white,
                       ),
                     )
-                  : const Icon(CupertinoIcons.stop_fill, size: 16),
-              label: Text(tr('session_stop')),
+                  : Icon(stopIcon, size: 16),
+              label: Text(stopLabel),
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _PauseVote extends StatelessWidget {
+  const _PauseVote({
+    required this.request,
+    required this.userId,
+    required this.busy,
+    required this.onAccept,
+    required this.onDecline,
+  });
+
+  final PauseRequest request;
+  final String userId;
+  final bool busy;
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final mine = request.requestedBy == userId;
+    final accepted = request.hasAccepted(userId);
+    final message = mine
+        ? tr('pause_request_waiting')
+        : accepted
+        ? tr('pause_request_accepted')
+        : tr('pause_request_incoming', args: [request.requestedName]);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: FoquiColors.grouped,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              message,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurface,
+                height: 1.35,
+              ),
+            ),
+            if (!mine && !accepted) ...[
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: busy ? null : onAccept,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: Text(tr('pause_request_accept')),
+              ),
+            ],
+            TextButton(
+              onPressed: busy ? null : onDecline,
+              style: TextButton.styleFrom(
+                minimumSize: const Size.fromHeight(44),
+              ),
+              child: Text(
+                mine ? tr('pause_request_cancel') : tr('pause_request_decline'),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -910,16 +1141,64 @@ class _BlockingCard extends StatelessWidget {
   }
 }
 
-/// Present so a session can be shared later. Tapping it does nothing yet.
-class _ShareButton extends StatelessWidget {
-  const _ShareButton();
+List<String> _namesFor(
+  FocusSession session,
+  AsyncValue<List<SessionParticipant>> members,
+) {
+  if (session.sharedSessionId == null) return _sessionMembers;
+  final people = members.asData?.value;
+  if (people == null || people.isEmpty) return _sessionMembers;
+  final names = [
+    for (final person in people)
+      if (person.name.isNotEmpty) person.name,
+  ];
+  if (names.isEmpty) return _sessionMembers;
+  return names;
+}
+
+class _ShareButton extends ConsumerStatefulWidget {
+  const _ShareButton({required this.session});
+
+  final FocusSession session;
+
+  @override
+  ConsumerState<_ShareButton> createState() => _ShareButtonState();
+}
+
+class _ShareButtonState extends ConsumerState<_ShareButton> {
+  var _sharing = false;
+
+  Future<void> _share() async {
+    if (_sharing) return;
+    setState(() => _sharing = true);
+    try {
+      final url = await ref
+          .read(focusControllerProvider.notifier)
+          .shareLink(widget.session.id);
+      if (!mounted || url == null) return;
+      final box = context.findRenderObject() as RenderBox?;
+      final origin = box == null
+          ? null
+          : box.localToGlobal(Offset.zero) & box.size;
+      await SharePlus.instance.share(
+        ShareParams(
+          text: tr('invite_share_message', args: [url]),
+          sharePositionOrigin: origin,
+        ),
+      );
+    } catch (error, stack) {
+      debugPrint('Could not share the session: $error\n$stack');
+    } finally {
+      if (mounted) setState(() => _sharing = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: tr('session_share'),
       child: TextButton.icon(
-        onPressed: () {},
+        onPressed: _sharing ? null : _share,
         style: TextButton.styleFrom(
           visualDensity: VisualDensity.compact,
           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -934,9 +1213,10 @@ class _ShareButton extends StatelessWidget {
 }
 
 class _MemberList extends StatelessWidget {
-  const _MemberList({required this.names});
+  const _MemberList({required this.names, required this.session});
 
   final List<String> names;
+  final FocusSession session;
 
   @override
   Widget build(BuildContext context) {
@@ -964,7 +1244,7 @@ class _MemberList extends StatelessWidget {
                 ),
               ),
             ),
-            const _ShareButton(),
+            _ShareButton(session: session),
           ],
         ),
         const SizedBox(height: 10),

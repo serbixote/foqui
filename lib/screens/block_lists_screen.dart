@@ -335,7 +335,7 @@ class _BlockListTile extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    list.name,
+                    blockListTitle(id: list.id, name: list.name),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),

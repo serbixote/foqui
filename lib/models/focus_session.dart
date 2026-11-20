@@ -17,6 +17,9 @@ class FocusSession {
     this.labelId,
     this.labelEmoji,
     this.labelName,
+    this.sharedSessionId,
+    this.inviteCode,
+    this.sharedHost = false,
   });
 
   final String id;
@@ -36,6 +39,15 @@ class FocusSession {
   final String? labelId;
   final String? labelEmoji;
   final String? labelName;
+
+  /// Shared room this phone is part of, when the session was shared or joined.
+  final String? sharedSessionId;
+
+  /// Invite code for [sharedSessionId]. Sharing again reuses it.
+  final String? inviteCode;
+
+  /// True on the phone that created the shared room.
+  final bool sharedHost;
 
   bool get hasLabel => labelId != null && (labelName?.isNotEmpty ?? false);
 
@@ -77,6 +89,9 @@ class FocusSession {
     String? labelId,
     String? labelEmoji,
     String? labelName,
+    String? sharedSessionId,
+    String? inviteCode,
+    bool? sharedHost,
   }) {
     return FocusSession(
       id: id,
@@ -92,6 +107,9 @@ class FocusSession {
       labelId: labelId ?? this.labelId,
       labelEmoji: labelEmoji ?? this.labelEmoji,
       labelName: labelName ?? this.labelName,
+      sharedSessionId: sharedSessionId ?? this.sharedSessionId,
+      inviteCode: inviteCode ?? this.inviteCode,
+      sharedHost: sharedHost ?? this.sharedHost,
     );
   }
 
@@ -108,6 +126,9 @@ class FocusSession {
       'labelId': labelId,
       'labelEmoji': labelEmoji,
       'labelName': labelName,
+      'sharedSessionId': sharedSessionId,
+      'inviteCode': inviteCode,
+      'sharedHost': sharedHost,
     };
   }
 
@@ -130,6 +151,9 @@ class FocusSession {
       labelId: json['labelId'] as String?,
       labelEmoji: json['labelEmoji'] as String?,
       labelName: json['labelName'] as String?,
+      sharedSessionId: json['sharedSessionId'] as String?,
+      inviteCode: json['inviteCode'] as String?,
+      sharedHost: json['sharedHost'] == true,
     );
   }
 }
@@ -190,6 +214,16 @@ List<FocusSession> dropUnrecordedSessions(
 bool sessionMeetsRecordedLength(FocusSession session, DateTime now) {
   final length = _runLength(session, now);
   return length != null && length >= minimumRecordedLength;
+}
+
+/// True when the user may pause [session].
+///
+/// Pausing lifts the shield, so it stays unavailable until the session has
+/// run for longer than [minimumRecordedLength].
+bool canPauseSession(FocusSession session, DateTime now) {
+  if (session.outcome != SessionOutcome.active) return false;
+  final length = _runLength(session, now);
+  return length != null && length > minimumRecordedLength;
 }
 
 bool _isRecorded(FocusSession session, DateTime now) {

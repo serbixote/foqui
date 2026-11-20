@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +11,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:foqui/models/block_list.dart';
 import 'package:foqui/models/focus_label.dart';
 import 'package:foqui/models/focus_session.dart';
+import 'package:foqui/models/shared_session.dart';
+import 'package:foqui/repositories/invite.dart';
 import 'package:foqui/screens/block_lists_screen.dart';
 import 'package:foqui/screens/home_screen.dart';
 import 'package:foqui/services/focus_shield_bridge.dart';
@@ -146,9 +150,11 @@ void main() {
     await tester.tap(find.byTooltip('Block lists'));
     await pumpTransitions(tester);
 
+    expect(find.text('Default'), findsOneWidget);
+    expect(find.text('Nothing selected'), findsOneWidget);
     expect(
       find.text('No lists yet. Add the apps you want Foqui to shield.'),
-      findsOneWidget,
+      findsNothing,
     );
 
     await tester.tap(find.byTooltip('What is a block list?'));
@@ -270,7 +276,7 @@ void main() {
         of: find.byType(BlockListsScreen),
         matching: find.byType(SurfaceCard),
       ),
-      findsNWidgets(2),
+      findsNWidgets(3),
     );
     expect(
       find.descendant(
@@ -286,12 +292,21 @@ void main() {
       ),
       findsNothing,
     );
+    expect(find.text('Default'), findsOneWidget);
     expect(find.byIcon(CupertinoIcons.star_fill), findsOneWidget);
-    expect(find.byIcon(CupertinoIcons.star), findsOneWidget);
+    expect(find.byIcon(CupertinoIcons.star), findsNWidgets(2));
     expect(find.textContaining('4 apps'), findsOneWidget);
     expect(find.text('1 app: Mail'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Make default'));
+    await tester.tap(
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('Work'),
+          matching: find.byType(SurfaceCard),
+        ),
+        matching: find.byTooltip('Make default'),
+      ),
+    );
     await pumpTransitions(tester);
 
     expect(find.byIcon(CupertinoIcons.star_fill), findsOneWidget);
@@ -410,7 +425,7 @@ void main() {
       ),
       findsNothing,
     );
-    expect(find.byIcon(CupertinoIcons.checkmark), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Save'), findsOneWidget);
     expect(_labelNameBorder(tester), isNull);
 
     await tester.tap(find.byKey(const Key('label-save')));
@@ -673,9 +688,7 @@ void main() {
 
     final delete = find.byKey(const Key('label-delete'));
     expect(delete, findsOneWidget);
-    final deleteSize = tester.getSize(delete);
-    expect(deleteSize.height, lessThan(32));
-    expect(deleteSize.width, lessThan(96));
+    expect(find.byIcon(CupertinoIcons.trash), findsOneWidget);
 
     await tester.tap(delete);
     await pumpTransitions(tester);
@@ -1518,6 +1531,13 @@ void main() {
     expect(find.text('In progress'), findsOneWidget);
     expect(find.text('Work'), findsOneWidget);
     expect(find.text('Pause'), findsOneWidget);
+    expect(find.byTooltip('You can pause after 5 minutes.'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Pause'))
+          .onPressed,
+      isNull,
+    );
     expect(find.text('Stop'), findsOneWidget);
     expect(
       tester.getSize(find.byType(SessionLiveActivity)).height,
@@ -1629,13 +1649,168 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('a group can leave, and a pause waits for everyone', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final now = DateTime.now();
+    final repository = MemoryFocusRepository(
+      lists: [
+        BlockList(
+          id: 'work',
+          name: 'Work',
+          applicationCount: 1,
+          categoryCount: 0,
+          webDomainCount: 0,
+          updatedAt: now,
+        ),
+      ],
+      sessions: [
+        FocusSession(
+          id: 'live',
+          blockListId: 'work',
+          blockListName: 'Work',
+          startedAt: now.subtract(const Duration(minutes: 6)),
+          endsAt: now.add(const Duration(minutes: 19)),
+          outcome: SessionOutcome.active,
+          sharedSessionId: 'room',
+        ),
+      ],
+    );
+    const members = [
+      SessionParticipant(uid: 'test-user', name: 'Marco', joinedAt: null),
+      SessionParticipant(uid: 'ada', name: 'Ada', joinedAt: null),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith(LoggedInAuthNotifier.new),
+          focusRepositoryProvider.overrideWithValue(repository),
+          participantsProvider.overrideWith(
+            (ref, sessionId) => Stream.value(members),
+          ),
+          pauseRequestProvider.overrideWith(
+            (ref, sessionId) => Stream.value(null),
+          ),
+        ],
+        child: const FoquiApp(),
+      ),
+    );
+    await settleApp(tester);
+
+    expect(find.text('Leave'), findsOneWidget);
+    expect(find.text('Stop'), findsNothing);
+    expect(find.text('In progress'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Pause'));
+    await pumpTransitions(tester);
+    expect(find.text('Request a pause?'), findsOneWidget);
+    expect(
+      find.text('Everyone in this session has to accept before it pauses.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Request pause'));
+    await pumpTransitions(tester);
+    expect(find.text('Request a pause?'), findsNothing);
+    expect(repository.sessions.single.outcome, SessionOutcome.active);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Leave'));
+    await pumpTransitions(tester);
+    expect(find.text('Leave this session?'), findsOneWidget);
+    expect(
+      find.text(
+        'Apps in Work will be available again. Everyone else keeps going.',
+      ),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.widgetWithText(TextButton, 'Leave'));
+    await pumpTransitions(tester);
+    expect(find.byTooltip('Start Focus'), findsOneWidget);
+    expect(repository.sessions.single.outcome, SessionOutcome.endedEarly);
+  });
+
+  testWidgets('a pause request stays open until every member accepts', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final now = DateTime.now();
+    final repository = MemoryFocusRepository(
+      sessions: [
+        FocusSession(
+          id: 'live',
+          blockListId: 'work',
+          blockListName: 'Work',
+          startedAt: now.subtract(const Duration(minutes: 6)),
+          endsAt: now.add(const Duration(minutes: 19)),
+          outcome: SessionOutcome.active,
+          sharedSessionId: 'room',
+        ),
+      ],
+    );
+    const members = [
+      SessionParticipant(uid: 'test-user', name: 'Marco', joinedAt: null),
+      SessionParticipant(uid: 'ada', name: 'Ada', joinedAt: null),
+    ];
+    final requests = StreamController<PauseRequest?>();
+    addTearDown(requests.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith(LoggedInAuthNotifier.new),
+          focusRepositoryProvider.overrideWithValue(repository),
+          participantsProvider.overrideWith(
+            (ref, sessionId) => Stream.value(members),
+          ),
+          pauseRequestProvider.overrideWith((ref, sessionId) => requests.stream),
+        ],
+        child: const FoquiApp(),
+      ),
+    );
+    requests.add(
+      const PauseRequest(
+        requestedBy: 'ada',
+        requestedName: 'Ada',
+        createdAt: null,
+        accepted: {'ada': true},
+      ),
+    );
+    await settleApp(tester);
+
+    expect(find.text('Ada wants to pause.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Accept'), findsOneWidget);
+    expect(find.text('In progress'), findsOneWidget);
+    expect(repository.sessions.single.outcome, SessionOutcome.active);
+
+    requests.add(
+      const PauseRequest(
+        requestedBy: 'ada',
+        requestedName: 'Ada',
+        createdAt: null,
+        accepted: {'ada': true, 'test-user': true},
+      ),
+    );
+    await settleApp(tester);
+    await tester.pump();
+
+    expect(find.text('Paused'), findsOneWidget);
+    expect(repository.sessions.single.outcome, SessionOutcome.paused);
+  });
 }
 
 final _missingRed = FoquiColors.destructive.withValues(alpha: 0.55);
 
 bool _labelSaveEnabled(WidgetTester tester) {
   return tester
-          .widget<IconButton>(find.byKey(const Key('label-save')))
+          .widget<ButtonStyleButton>(find.byKey(const Key('label-save')))
           .onPressed !=
       null;
 }

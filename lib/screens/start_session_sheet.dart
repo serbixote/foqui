@@ -457,6 +457,7 @@ class _SessionForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final list = selected;
     final custom = minutes != null && !sessionPresets.contains(minutes);
     final muted = theme.textTheme.titleSmall?.copyWith(
       fontWeight: FontWeight.w600,
@@ -503,8 +504,10 @@ class _SessionForm extends StatelessWidget {
           const SizedBox(height: 14),
           _ChoiceRow(
             title: tr('session_block_list'),
-            value: selected?.name ?? tr('session_none'),
-            muted: selected == null,
+            value: list == null
+                ? tr('session_none')
+                : blockListTitle(id: list.id, name: list.name),
+            muted: list == null,
             onTap: onOpenLists,
           ),
           const SizedBox(height: 28),
@@ -824,7 +827,7 @@ class _ListChoice extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    list.name,
+                    blockListTitle(id: list.id, name: list.name),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),

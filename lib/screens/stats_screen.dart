@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/tr.dart';
+import '../models/block_list.dart';
 import '../models/focus_label.dart';
 import '../models/focus_stats.dart';
 import '../state/focus_controller.dart';
@@ -139,7 +140,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                 children: [
                   for (final list in stats.byList)
                     _ShareTile(
-                      title: list.name,
+                      title: blockListTitle(id: list.id, name: list.name),
                       detail: _sessionsLabel(list.sessions),
                       value: formatFocusTotal(list.focused),
                       share: _share(list.focused, stats.byList.first.focused),

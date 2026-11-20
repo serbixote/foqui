@@ -6,7 +6,7 @@
 	<true/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.example.foqui</string>
+		<string>group.foqui.theboringbuilders.xyz</string>
 	</array>
 </dict>
 </plist>

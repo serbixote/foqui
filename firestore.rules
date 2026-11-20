@@ -101,5 +101,244 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
     }
+
+    function validTitle(title) {
+      return title is string && title.size() > 0 && title.size() <= 80;
+    }
+
+    function validEmoji(emoji) {
+      return emoji == null
+        || (emoji is string && emoji.size() > 0 && emoji.size() <= 32);
+    }
+
+    function validDuration(minutes) {
+      return minutes == null
+        || (minutes is int && minutes >= 15 && minutes <= 180);
+    }
+
+    function validCode(code) {
+      return code is string && code.matches('^[0-9a-f]{32}$');
+    }
+
+    function matchesAlias(name) {
+      return name is string
+        && name.size() > 0
+        && name.size() <= 40
+        && name == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.alias;
+    }
+
+    function sessionPath(sessionId) {
+      return /databases/$(database)/documents/sessions/$(sessionId);
+    }
+
+    function invitePath(code) {
+      return /databases/$(database)/documents/invitations/$(code);
+    }
+
+    function isSessionHost(sessionId) {
+      return isSignedIn()
+        && get(sessionPath(sessionId)).data.hostId == request.auth.uid;
+    }
+
+    function isSessionMember(sessionId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/sessions/$(sessionId)/participants/$(request.auth.uid));
+    }
+
+    function validExpiry(value) {
+      return value is timestamp
+        && value > request.time
+        && value < request.time + duration.value(48, 'h');
+    }
+
+    function validStarted(value) {
+      return value == null
+        || (value is timestamp
+          && value < request.time + duration.value(2, 'm')
+          && value > request.time - duration.value(7, 'd'));
+    }
+
+    function validEnds(value) {
+      return value == null
+        || (value is timestamp
+          && value < request.time + duration.value(7, 'd')
+          && value > request.time - duration.value(1, 'h'));
+    }
+
+    // The code is the secret. Joining checks this invite, not the client's word.
+    function inviteAllows(sessionId, code) {
+      let invite = getAfter(invitePath(code)).data;
+      let session = getAfter(sessionPath(sessionId)).data;
+      return validCode(code)
+        && invite.sessionId == sessionId
+        && invite.revoked == false
+        && invite.expiresAt > request.time
+        && session.status != 'ended'
+        && session.expiresAt > request.time;
+    }
+
+    match /sessions/{sessionId} {
+      allow get: if isSessionHost(sessionId) || isSessionMember(sessionId);
+      allow list: if false;
+
+      allow create: if isSignedIn()
+        && validCode(sessionId)
+        && request.resource.data.keys().hasOnly([
+          'hostId',
+          'hostName',
+          'title',
+          'labelEmoji',
+          'durationMinutes',
+          'status',
+          'startedAt',
+          'endsAt',
+          'createdAt',
+          'expiresAt'
+        ])
+        && request.resource.data.hostId == request.auth.uid
+        && matchesAlias(request.resource.data.hostName)
+        && validTitle(request.resource.data.title)
+        && validEmoji(request.resource.data.labelEmoji)
+        && validDuration(request.resource.data.durationMinutes)
+        && request.resource.data.status in ['waiting', 'active']
+        && request.resource.data.createdAt == request.time
+        && validStarted(request.resource.data.startedAt)
+        && validEnds(request.resource.data.endsAt)
+        && validExpiry(request.resource.data.expiresAt);
+
+      allow update: if isSessionHost(sessionId)
+        && request.resource.data.hostId == resource.data.hostId
+        && request.resource.data.hostName == resource.data.hostName
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.labelEmoji == resource.data.labelEmoji
+        && request.resource.data.durationMinutes == resource.data.durationMinutes
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.status in ['waiting', 'active', 'ended']
+        && !(resource.data.status == 'ended'
+          && request.resource.data.status != 'ended')
+        && (request.resource.data.startedAt == resource.data.startedAt
+          || validStarted(request.resource.data.startedAt))
+        && (request.resource.data.endsAt == resource.data.endsAt
+          || validEnds(request.resource.data.endsAt))
+        && request.resource.data.expiresAt is timestamp
+        && (request.resource.data.expiresAt == resource.data.expiresAt
+          || validExpiry(request.resource.data.expiresAt))
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'startedAt', 'endsAt', 'expiresAt']);
+
+      allow delete: if false;
+
+      match /participants/{userId} {
+        allow read: if isSessionHost(sessionId) || isSessionMember(sessionId);
+        allow list: if isSessionHost(sessionId) || isSessionMember(sessionId);
+
+        allow create: if isSignedIn()
+          && userId == request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'uid',
+            'name',
+            'joinedAt',
+            'inviteCode'
+          ])
+          && request.resource.data.uid == request.auth.uid
+          && matchesAlias(request.resource.data.name)
+          && request.resource.data.joinedAt == request.time
+          && inviteAllows(sessionId, request.resource.data.inviteCode);
+
+        allow update: if false;
+        allow delete: if isSignedIn() && userId == request.auth.uid;
+      }
+
+      match /pauseRequest/{requestId} {
+        allow get: if requestId == 'current'
+          && (isSessionHost(sessionId) || isSessionMember(sessionId));
+        allow list: if false;
+
+        allow create: if requestId == 'current'
+          && isSessionMember(sessionId)
+          && request.resource.data.keys().hasOnly([
+            'requestedBy',
+            'requestedName',
+            'createdAt',
+            'accepted'
+          ])
+          && request.resource.data.requestedBy == request.auth.uid
+          && matchesAlias(request.resource.data.requestedName)
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.accepted is map
+          && request.resource.data.accepted.keys().hasOnly([request.auth.uid])
+          && request.resource.data.accepted[request.auth.uid] == true;
+
+        allow update: if requestId == 'current'
+          && isSessionMember(sessionId)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['accepted'])
+          && request.resource.data.accepted is map
+          && request.resource.data.accepted
+            .diff(resource.data.accepted)
+            .affectedKeys()
+            .hasOnly([request.auth.uid])
+          && request.resource.data.accepted[request.auth.uid] == true;
+
+        allow delete: if requestId == 'current' && isSessionMember(sessionId);
+      }
+    }
+
+    match /invitations/{code} {
+      allow get: if isSignedIn() && validCode(code);
+      allow list: if false;
+
+      allow create: if isSignedIn()
+        && validCode(code)
+        && request.resource.data.keys().hasOnly([
+          'sessionId',
+          'createdBy',
+          'hostName',
+          'title',
+          'labelEmoji',
+          'durationMinutes',
+          'createdAt',
+          'expiresAt',
+          'revoked'
+        ])
+        && validCode(request.resource.data.sessionId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.revoked == false
+        && getAfter(sessionPath(request.resource.data.sessionId)).data.hostId
+          == request.auth.uid
+        && matchesAlias(request.resource.data.hostName)
+        && validTitle(request.resource.data.title)
+        && validEmoji(request.resource.data.labelEmoji)
+        && validDuration(request.resource.data.durationMinutes)
+        && request.resource.data.createdAt == request.time
+        && validExpiry(request.resource.data.expiresAt);
+
+      allow update: if isSignedIn()
+        && resource.data.createdBy == request.auth.uid
+        && request.resource.data.sessionId == resource.data.sessionId
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.hostName == resource.data.hostName
+        && request.resource.data.title == resource.data.title
+        && request.resource.data.labelEmoji == resource.data.labelEmoji
+        && request.resource.data.durationMinutes == resource.data.durationMinutes
+        && request.resource.data.createdAt == resource.data.createdAt
+        && (
+          (
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['revoked'])
+            && resource.data.revoked == false
+            && request.resource.data.revoked == true
+          )
+          || (
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['expiresAt'])
+            && resource.data.revoked == false
+            && request.resource.data.revoked == false
+            && validExpiry(request.resource.data.expiresAt)
+          )
+        );
+
+      allow delete: if false;
+    }
   }
 }

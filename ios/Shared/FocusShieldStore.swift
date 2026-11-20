@@ -15,7 +15,7 @@ enum FocusShieldError: LocalizedError {
     case .tooShort:
       return "A focus session has to be at least 15 minutes."
     case .appGroupUnavailable:
-      return "The Foqui App Group is not available. Enable group.com.example.foqui for this target."
+      return "The Foqui App Group is not available. Enable group.foqui.theboringbuilders.xyz for this target."
     }
   }
 
@@ -37,7 +37,7 @@ enum FocusShieldError: LocalizedError {
 /// extension clears the shield when the schedule ends — including if Foqui
 /// has been closed.
 enum FocusShieldStore {
-  static let appGroupId = "group.com.example.foqui"
+  static let appGroupId = "group.foqui.theboringbuilders.xyz"
   static let activityName = DeviceActivityName("foqui.focus")
   static let storeName = ManagedSettingsStore.Name("foqui.focus")
   static let activeListKey = "foqui.activeListId"

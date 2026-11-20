@@ -4,7 +4,7 @@ import '../theme/app_theme.dart';
 
 /// Capsule or circle chrome that stays readable when it overlaps content.
 ///
-/// A hairline keeps the bar visible on the black canvas. The solid action
+/// A hairline keeps the bar visible on the charcoal canvas. The solid action
 /// button gets a soft tinted shadow instead, the way Billy's add button sits
 /// off the tab bar.
 class FloatingChrome extends StatelessWidget {

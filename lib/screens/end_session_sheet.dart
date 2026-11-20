@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/tr.dart';
+import '../models/block_list.dart';
 import '../models/focus_session.dart';
 import '../state/focus_controller.dart';
 import '../theme/app_theme.dart';
@@ -109,7 +110,15 @@ class _EndSessionSheetState extends ConsumerState<EndSessionSheet> {
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    tr('end_body', args: [session.blockListName]),
+                    tr(
+                      'end_body',
+                      args: [
+                        blockListTitle(
+                          id: session.blockListId,
+                          name: session.blockListName,
+                        ),
+                      ],
+                    ),
                     style: theme.textTheme.bodyMedium?.copyWith(
                       color: scheme.onSurfaceVariant,
                       height: 1.35,
@@ -117,7 +126,7 @@ class _EndSessionSheetState extends ConsumerState<EndSessionSheet> {
                   ),
                   if (!counts) ...[
                     const SizedBox(height: 16),
-                    const _ShortSessionNote(),
+                    const ShortSessionNote(),
                   ],
                   const SizedBox(height: 20),
                   FilledButton(
@@ -146,8 +155,8 @@ class _EndSessionSheetState extends ConsumerState<EndSessionSheet> {
   }
 }
 
-class _ShortSessionNote extends StatelessWidget {
-  const _ShortSessionNote();
+class ShortSessionNote extends StatelessWidget {
+  const ShortSessionNote({super.key});
 
   @override
   Widget build(BuildContext context) {

@@ -16,6 +16,7 @@ import 'screens/onboarding_screen.dart';
 import 'screens/sign_in_screen.dart';
 import 'state/auth.dart';
 import 'state/focus_controller.dart';
+import 'state/invite_link.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -79,10 +80,13 @@ class FoquiRoot extends ConsumerWidget {
       theme: AppTheme.dark,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.dark,
+      navigatorKey: rootNavigatorKey,
       builder: (context, child) {
-        return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: SystemUiOverlayStyle.light,
-          child: child ?? const SizedBox.shrink(),
+        return InviteLinkBinding(
+          child: AnnotatedRegion<SystemUiOverlayStyle>(
+            value: SystemUiOverlayStyle.light,
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
       home: switch (auth.loginState) {

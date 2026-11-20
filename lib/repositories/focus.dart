@@ -287,7 +287,7 @@ List<BlockList> _listsFrom(QuerySnapshot<Map<String, dynamic>> snapshot) {
       debugPrint('Skipping block list ${doc.id}: $error\n$stack');
     }
   }
-  lists.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  lists.sort(compareBlockLists);
   return lists;
 }
 

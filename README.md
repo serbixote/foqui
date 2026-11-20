@@ -8,10 +8,10 @@ Blocking uses Family Controls on a physical iPhone. The simulator can open the a
 
 ## Screen Time setup
 
-Signing needs both targets, `com.example.foqui` and `com.example.foqui.FocusActivityMonitor`, plus the App Group `group.com.example.foqui`.
+Signing needs both targets, `foqui.theboringbuilders.xyz` and `foqui.theboringbuilders.xyz.FocusActivityMonitor`, plus the App Group `group.foqui.theboringbuilders.xyz`.
 
 1. In the Apple Developer portal, register both App IDs.
-2. Enable Family Controls and App Groups on each ID, and add `group.com.example.foqui` to both.
+2. Enable Family Controls and App Groups on each ID, and add `group.foqui.theboringbuilders.xyz` to both.
 3. In Xcode, confirm the Runner and FocusActivityMonitor targets use team `PPKD4UG65K` and their entitlements files.
 
 Family Controls for the App Store needs Apple's distribution approval. Development builds work once the capability is on the App ID.

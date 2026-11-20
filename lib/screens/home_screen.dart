@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/tr.dart';
+import '../models/block_list.dart';
 import '../models/focus_label.dart';
 import '../models/focus_session.dart';
 import '../services/focus_shield_bridge.dart';
@@ -147,10 +148,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   SurfaceGroup(
                     children: [
                       for (final session in shown)
-                        _HistoryTile(
-                          session: session,
-                          labels: state.labels,
-                        ),
+                        _HistoryTile(session: session, labels: state.labels),
                     ],
                   ),
                 ],
@@ -409,7 +407,8 @@ class _HistoryTile extends StatelessWidget {
     final label = _labelTitle(session, labels);
     final stamp = formatSessionStamp(session.startedAt, DateTime.now());
     final detail = [
-      if (label != null) session.blockListName,
+      if (label != null)
+        blockListTitle(id: session.blockListId, name: session.blockListName),
       length,
       stamp,
       session.outcomeLabel,
@@ -420,7 +419,11 @@ class _HistoryTile extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label ?? session.blockListName,
+            label ??
+                blockListTitle(
+                  id: session.blockListId,
+                  name: session.blockListName,
+                ),
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w600,
             ),

@@ -40,7 +40,9 @@ class BlockListSheet extends ConsumerStatefulWidget {
 class _BlockListSheetState extends ConsumerState<BlockListSheet> {
   late final String _id = widget.existing?.id ?? _uuid.v4();
   late final TextEditingController _name = TextEditingController(
-    text: widget.existing?.name ?? '',
+    text: widget.existing == null
+        ? ''
+        : blockListTitle(id: widget.existing!.id, name: widget.existing!.name),
   );
   late int _apps = widget.existing?.applicationCount ?? 0;
   late int _categories = widget.existing?.categoryCount ?? 0;
@@ -90,7 +92,7 @@ class _BlockListSheetState extends ConsumerState<BlockListSheet> {
   }
 
   Future<void> _save() async {
-    final name = _name.text.trim();
+    final name = storedBlockListName(id: _id, typed: _name.text);
     if (name.isEmpty || _total == 0 || _busy) return;
     setState(() => _busy = true);
     try {
@@ -195,17 +197,10 @@ class _BlockListSheetState extends ConsumerState<BlockListSheet> {
             const SheetGrabber(),
             SheetHeader(
               title: widget.existing == null ? tr('list_new') : tr('list_edit'),
-              actionLabel: _busy ? tr('common_saving') : tr('common_save'),
-              actionEnabled: canSave,
-              onAction: _save,
+              trailing: _deleteAction(),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                8,
-                20,
-                kSheetBottomPadding,
-              ),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -267,23 +262,53 @@ class _BlockListSheetState extends ConsumerState<BlockListSheet> {
                       ),
                     ),
                   ),
-                  if (widget.existing != null)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: TextButton(
-                        onPressed: _busy ? null : _delete,
-                        style: TextButton.styleFrom(
-                          foregroundColor: FoquiColors.destructive,
-                          padding: const EdgeInsets.symmetric(horizontal: 0),
-                        ),
-                        child: Text(tr('list_delete')),
-                      ),
-                    ),
                 ],
               ),
             ),
+            const SizedBox(height: 28),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: FilledButton(
+                onPressed: canSave ? _save : null,
+                style: FilledButton.styleFrom(
+                  disabledBackgroundColor: _busy
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                  disabledForegroundColor: _busy
+                      ? Colors.white
+                      : theme.colorScheme.onSurface.withValues(alpha: 0.38),
+                ),
+                child: _busy
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(tr('common_save')),
+              ),
+            ),
+            const SizedBox(height: kSheetBottomPadding),
           ],
         ),
+      ),
+    );
+  }
+
+  /// A list you created can be removed from the corner. The default list stays.
+  Widget? _deleteAction() {
+    final existing = widget.existing;
+    if (existing == null || existing.id == defaultBlockListId) return null;
+    return IconButton(
+      tooltip: tr('list_delete'),
+      visualDensity: VisualDensity.compact,
+      onPressed: _busy ? null : _delete,
+      icon: const Icon(
+        CupertinoIcons.trash,
+        size: 22,
+        color: FoquiColors.destructive,
       ),
     );
   }

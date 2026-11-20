@@ -4,7 +4,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:uuid/uuid.dart';
 
 import '../l10n/tr.dart';
 import '../models/block_list.dart';
@@ -19,7 +18,6 @@ import '../theme/app_theme.dart';
 import 'app_shell.dart';
 import 'sign_in_screen.dart';
 
-const _uuid = Uuid();
 const _usernamePause = Duration(milliseconds: 400);
 
 /// Sends a signed-in person through onboarding until their profile is done.
@@ -97,9 +95,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     text: widget.profile.username ?? '',
   );
   late final TextEditingController _listName = TextEditingController(
-    text: tr('session_focus_fallback'),
+    text: tr('list_default_name'),
   );
-  String? _listId;
+  final String _listId = defaultBlockListId;
 
   late int _stepIndex = widget.profile.username == null ? 0 : 2;
   bool? _includeList;
@@ -119,20 +117,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   int get _selectionCount => _apps + _categories + _websites;
 
-  String _requireListId() => _listId ??= _uuid.v4();
-
-  /// Fills the step with the list already on the account when it has no apps.
-  void _adoptEmptyList(List<BlockList> lists) {
-    BlockList? repair;
+  /// The step edits the account's block list, using the name it already has.
+  void _prepareDefaultList(List<BlockList> lists) {
     for (final list in lists) {
-      if (!list.isEmpty) continue;
-      if (repair == null || (list.isFavorite && !repair.isFavorite)) {
-        repair = list;
-      }
+      if (list.id != defaultBlockListId) continue;
+      _listName.text = blockListTitle(id: list.id, name: list.name);
+      return;
     }
-    if (repair == null) return;
-    _listId = repair.id;
-    _listName.text = repair.name;
   }
 
   @override
@@ -148,9 +139,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   @override
   void dispose() {
     _usernameTimer?.cancel();
-    final listId = _listId;
-    if (listId != null && _touchedPicker && !_savedList) {
-      unawaited(ref.read(focusShieldBridgeProvider).discardDraft(listId));
+    if (_touchedPicker && !_savedList) {
+      unawaited(ref.read(focusShieldBridgeProvider).discardDraft(_listId));
     }
     _alias.dispose();
     _username.dispose();
@@ -318,7 +308,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       }
       final counts = await ref
           .read(focusShieldBridgeProvider)
-          .presentAppPicker(_requireListId());
+          .presentAppPicker(_listId);
       if (!mounted || counts == null) return;
       setState(() {
         _apps = counts.applicationCount;
@@ -338,7 +328,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   Future<void> _saveList() {
-    final name = _listName.text.trim();
+      final name = storedBlockListName(id: _listId, typed: _listName.text);
     return _run(() async {
       var apps = _apps;
       var categories = _categories;
@@ -348,7 +338,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         try {
           final counts = await ref
               .read(focusShieldBridgeProvider)
-              .commitSelection(_requireListId());
+              .commitSelection(_listId);
           if (!mounted) return;
           if (counts == null || counts.total == 0) return;
           apps = counts.applicationCount;
@@ -367,7 +357,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           .read(focusControllerProvider.notifier)
           .upsertList(
             BlockList(
-              id: _requireListId(),
+              id: _listId,
               name: name,
               applicationCount: apps,
               categoryCount: categories,
@@ -399,8 +389,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       if (!loaded || !focus.selectionsReady) {
         return const Scaffold(body: Center(child: CircularProgressIndicator()));
       }
-      _includeList = !focus.lists.any((list) => !list.isEmpty);
-      _adoptEmptyList(focus.lists);
+      _includeList = !focus.lists.any(
+        (list) => list.id == defaultBlockListId && !list.isEmpty,
+      );
+      _prepareDefaultList(focus.lists);
     }
 
     final steps = _steps();
@@ -455,7 +447,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       _Step.blockList => _BlockListBody(
         name: _listName,
         summary: BlockList(
-          id: _requireListId(),
+          id: _listId,
           name: _listName.text,
           applicationCount: _apps,
           categoryCount: _categories,

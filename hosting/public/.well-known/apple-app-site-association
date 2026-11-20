@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": ["PPKD4UG65K.foqui.theboringbuilders.xyz"],
+        "components": [
+          {
+            "/": "/join/*",
+            "comment": "Foqui session invites"
+          }
+        ]
+      },
+      {
+        "appID": "PPKD4UG65K.foqui.theboringbuilders.xyz",
+        "paths": ["/join/*"]
+      }
+    ]
+  }
+}

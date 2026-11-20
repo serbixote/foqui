@@ -2,6 +2,30 @@
   "firestore": {
     "rules": "firestore.rules"
   },
+  "hosting": {
+    "public": "hosting/public",
+    "ignore": [
+      "firebase.json",
+      "**/node_modules/**"
+    ],
+    "headers": [
+      {
+        "source": "/.well-known/apple-app-site-association",
+        "headers": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ]
+      }
+    ],
+    "rewrites": [
+      {
+        "source": "/join/**",
+        "destination": "/join.html"
+      }
+    ]
+  },
   "flutter": {
     "platforms": {
       "android": {
@@ -14,7 +38,7 @@
       "ios": {
         "default": {
           "projectId": "theboringbuilders-foqui",
-          "appId": "1:486004582512:ios:2ed673c1d39d69408a6cb5",
+          "appId": "1:486004582512:ios:325707ecbf4178998a6cb5",
           "uploadDebugSymbols": false,
           "fileOutput": "ios/Runner/GoogleService-Info.plist"
         }
@@ -24,7 +48,7 @@
           "projectId": "theboringbuilders-foqui",
           "configurations": {
             "android": "1:486004582512:android:6a0dac90abc8e0d28a6cb5",
-            "ios": "1:486004582512:ios:2ed673c1d39d69408a6cb5"
+            "ios": "1:486004582512:ios:325707ecbf4178998a6cb5"
           }
         }
       }

@@ -32,7 +32,8 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
 
     final directory = _Directory(taken: {'takenname'});
-    await _pump(tester, directory);
+    final repository = MemoryFocusRepository();
+    await _pump(tester, directory, repository);
 
     expect(find.text('What should we call you?'), findsOneWidget);
     expect(find.text('Alias'), findsOneWidget);
@@ -74,8 +75,8 @@ void main() {
 
     expect(directory.alias, 'Ada');
     expect(directory.username, 'marco');
-    expect(find.text('Your first block list'), findsOneWidget);
-    expect(find.text('Focus'), findsOneWidget);
+    expect(find.text('Your default block list'), findsOneWidget);
+    expect(find.text('Default'), findsOneWidget);
     expect(find.text("I'll do this later"), findsNothing);
     expect(_continue(tester).onPressed, isNull);
     expect(directory.completed, isFalse);
@@ -87,6 +88,12 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Continue'));
     await _frames(tester);
 
+    final saved = repository.lists.singleWhere(
+      (list) => list.id == defaultBlockListId,
+    );
+    expect(saved.name, defaultBlockListName);
+    expect(saved.isFavorite, isTrue);
+    expect(saved.applicationCount, 2);
     expect(find.text('Screen Time'), findsOneWidget);
     expect(find.text('Not now'), findsOneWidget);
     expect(directory.completed, isFalse);
@@ -136,12 +143,15 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Your first block list'), findsOneWidget);
+    expect(find.text('Your default block list'), findsOneWidget);
     expect(
       tester.widget<TextField>(find.byType(TextField)).controller?.text,
-      'Social',
+      'Default',
     );
-    expect(repository.lists.single.isEmpty, isTrue);
+    expect(
+      repository.lists.singleWhere((list) => list.id == 'social').isEmpty,
+      isTrue,
+    );
     expect(find.text('Screen Time'), findsNothing);
   });
 }
@@ -152,13 +162,17 @@ FilledButton _filled(WidgetTester tester, String label) {
   return tester.widget<FilledButton>(find.widgetWithText(FilledButton, label));
 }
 
-Future<void> _pump(WidgetTester tester, _Directory directory) async {
+Future<void> _pump(
+  WidgetTester tester,
+  _Directory directory,
+  MemoryFocusRepository repository,
+) async {
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
         authProvider.overrideWith(_LoggedIn.new),
         userRepositoryProvider.overrideWithValue(directory),
-        focusRepositoryProvider.overrideWithValue(MemoryFocusRepository()),
+        focusRepositoryProvider.overrideWithValue(repository),
         focusShieldBridgeProvider.overrideWithValue(_QuietShield()),
       ],
       child: EasyLocalization(

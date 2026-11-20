@@ -9,3 +9,7 @@ const usernamesCollection = 'usernames';
 const blockListsCollection = 'blockLists';
 const sessionsCollection = 'sessions';
 const labelsCollection = 'labels';
+const invitationsCollection = 'invitations';
+const participantsCollection = 'participants';
+const pauseRequestCollection = 'pauseRequest';
+const currentPauseRequestId = 'current';

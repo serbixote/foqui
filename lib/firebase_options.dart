@@ -59,10 +59,10 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyDzjE0StHYVPn-tT4BjXqxKX0q55tUFEW4',
-    appId: '1:486004582512:ios:2ed673c1d39d69408a6cb5',
+    appId: '1:486004582512:ios:325707ecbf4178998a6cb5',
     messagingSenderId: '486004582512',
     projectId: 'theboringbuilders-foqui',
     storageBucket: 'theboringbuilders-foqui.firebasestorage.app',
-    iosBundleId: 'com.example.foqui',
+    iosBundleId: 'foqui.theboringbuilders.xyz',
   );
 }

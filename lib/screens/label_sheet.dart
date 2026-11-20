@@ -303,30 +303,10 @@ class _LabelSheetState extends ConsumerState<LabelSheet> {
             title: widget.existing == null
                 ? tr('lists_new_label')
                 : tr('lists_edit_label'),
-            trailing: IconButton(
-              key: const Key('label-save'),
-              tooltip: _busy ? tr('common_saving') : tr('common_save'),
-              onPressed: _canSave ? _submit : null,
-              icon: _busy
-                  ? SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: theme.colorScheme.primary,
-                      ),
-                    )
-                  : Icon(
-                      CupertinoIcons.checkmark,
-                      size: 26,
-                      color: _canSave
-                          ? theme.colorScheme.primary
-                          : theme.colorScheme.onSurface.withValues(alpha: 0.28),
-                    ),
-            ),
+            trailing: _deleteAction(),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -370,40 +350,36 @@ class _LabelSheetState extends ConsumerState<LabelSheet> {
               ),
             ),
           ),
-          if (widget.existing != null && !isBuiltInLabel(widget.existing!.id))
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 2, 20, 0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  key: const Key('label-delete'),
-                  onPressed: _canDelete ? _confirmDelete : null,
-                  style: TextButton.styleFrom(
-                    foregroundColor: FoquiColors.destructive,
-                    visualDensity: VisualDensity.compact,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    minimumSize: Size.zero,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 2,
-                      vertical: 2,
-                    ),
-                    textStyle: theme.textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  child: Text(tr('common_delete')),
-                ),
+          const SizedBox(height: 28),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: FilledButton(
+              key: const Key('label-save'),
+              onPressed: _canSave ? _submit : null,
+              style: FilledButton.styleFrom(
+                disabledBackgroundColor: _busy
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.12),
+                disabledForegroundColor: _busy
+                    ? Colors.white
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.38),
               ),
+              child: _busy
+                  ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : Text(tr('common_save')),
             ),
+          ),
           Flexible(
             fit: FlexFit.loose,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                0,
-                20,
-                kSheetBottomPadding,
-              ),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final available = constraints.maxHeight.isFinite
@@ -429,7 +405,25 @@ class _LabelSheetState extends ConsumerState<LabelSheet> {
               ),
             ),
           ),
+          const SizedBox(height: kSheetBottomPadding),
         ],
+      ),
+    );
+  }
+
+  /// A label you created can be removed from the corner. Save stays below.
+  Widget? _deleteAction() {
+    final existing = widget.existing;
+    if (existing == null || isBuiltInLabel(existing.id)) return null;
+    return IconButton(
+      key: const Key('label-delete'),
+      tooltip: tr('common_delete'),
+      visualDensity: VisualDensity.compact,
+      onPressed: _canDelete ? _confirmDelete : null,
+      icon: const Icon(
+        CupertinoIcons.trash,
+        size: 22,
+        color: FoquiColors.destructive,
       ),
     );
   }

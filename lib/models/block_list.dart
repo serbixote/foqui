@@ -1,5 +1,68 @@
 import '../l10n/tr.dart';
 
+/// The block list every account has. It can be edited, not deleted.
+const defaultBlockListId = 'default';
+
+/// Stored name of [defaultBlockListId] before someone renames it.
+const defaultBlockListName = 'Default';
+
+/// A new account's block list. It starts as the preferred list.
+BlockList defaultBlockList({bool isFavorite = true, DateTime? updatedAt}) {
+  return BlockList(
+    id: defaultBlockListId,
+    name: defaultBlockListName,
+    applicationCount: 0,
+    categoryCount: 0,
+    webDomainCount: 0,
+    updatedAt: updatedAt ?? DateTime.now(),
+    isFavorite: isFavorite,
+  );
+}
+
+/// Inserts the account's block list when it is missing.
+///
+/// An existing preferred list keeps that role. Otherwise the new list is
+/// the one new sessions and joins preselect.
+List<BlockList> ensureDefaultBlockList(List<BlockList> lists) {
+  if (lists.any((list) => list.id == defaultBlockListId)) return lists;
+  final preferred = lists.any((list) => list.isFavorite);
+  return [defaultBlockList(isFavorite: !preferred), ...lists];
+}
+
+/// Oldest first, so a list you just added stays at the bottom.
+int compareBlockLists(BlockList a, BlockList b) {
+  return a.updatedAt.compareTo(b.updatedAt);
+}
+
+/// The list a join preselects: the preferred one, when it has something to block.
+String? preferredJoinListId(Iterable<BlockList> lists) {
+  String? firstUsable;
+  for (final list in lists) {
+    if (list.isEmpty) continue;
+    if (list.isFavorite) return list.id;
+    firstUsable ??= list.id;
+  }
+  return firstUsable;
+}
+
+/// The name to show. The untouched default list follows the current language.
+String blockListTitle({required String id, required String name}) {
+  if (id == defaultBlockListId && name == defaultBlockListName) {
+    return tr('list_default_name');
+  }
+  return name;
+}
+
+/// Keeps the default list's stored name canonical when it was not renamed.
+String storedBlockListName({required String id, required String typed}) {
+  final name = typed.trim();
+  if (id == defaultBlockListId &&
+      (name == defaultBlockListName || name == tr('list_default_name'))) {
+    return defaultBlockListName;
+  }
+  return name;
+}
+
 class BlockList {
   const BlockList({
     required this.id,
