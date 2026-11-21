@@ -23,8 +23,15 @@ abstract class UserDirectory {
   /// single read as the directory grows. Callers should debounce.
   Future<bool> isUsernameAvailable(String normalized);
 
-  Future<void> claimProfile({required String alias, required String username});
+  /// Saves the alias and username on the account and drops any directory
+  /// document this account holds. The name stays available until
+  /// [completeOnboarding].
+  Future<void> saveProfile({required String alias, required String username});
 
+  /// Drops this account's username document when onboarding is unfinished.
+  Future<void> releaseUsername();
+
+  /// Publishes the saved username and marks onboarding finished.
   Future<void> completeOnboarding();
 
   Future<void> createIfDoesNotExist();
@@ -64,7 +71,7 @@ class UserRepository extends Repository implements UserDirectory {
   }
 
   @override
-  Future<void> claimProfile({required String alias, required String username}) {
+  Future<void> saveProfile({required String alias, required String username}) {
     final cleanedAlias = alias.trim();
     final normalized = Username.normalize(username);
     if (!Username.isAliasValid(cleanedAlias) || !Username.isValid(normalized)) {
@@ -72,35 +79,26 @@ class UserRepository extends Repository implements UserDirectory {
     }
 
     return _guard(() async {
-      final usernameRef = firestore
-          .collection(usernamesCollection)
-          .doc(normalized);
-      // Returning normally keeps the transaction from retrying. A thrown
-      // error inside the handler is retried, which would multiply reads.
-      var taken = false;
       await firestore.runTransaction((transaction) async {
-        taken = false;
-        final usernameSnap = await transaction.get(usernameRef);
-        final owner = usernameSnap.data()?[usernameOwnerField];
-        if (usernameSnap.exists && owner != userId) {
-          taken = true;
-          return;
-        }
-
         final userSnap = await transaction.get(_user);
+        if (userSnap.data()?[onboardedField] == true) return;
+
         final previous = userSnap.data()?[usernameField];
-        if (previous is String &&
-            previous.isNotEmpty &&
-            previous != normalized) {
-          transaction.delete(
-            firestore.collection(usernamesCollection).doc(previous),
-          );
+        final names = <String>{normalized};
+        if (previous is String && previous.isNotEmpty) names.add(previous);
+
+        final held = <DocumentReference<Map<String, dynamic>>>[];
+        for (final name in names) {
+          final ref = firestore.collection(usernamesCollection).doc(name);
+          final snap = await transaction.get(ref);
+          if (snap.exists && snap.data()?[usernameOwnerField] == userId) {
+            held.add(ref);
+          }
+        }
+        for (final ref in held) {
+          transaction.delete(ref);
         }
 
-        transaction.set(usernameRef, {
-          usernameOwnerField: userId,
-          aliasField: cleanedAlias,
-        });
         final createdAt = userSnap.data()?[createdAtField];
         transaction.set(_user, {
           aliasField: cleanedAlias,
@@ -109,14 +107,68 @@ class UserRepository extends Repository implements UserDirectory {
             createdAtField: DateTime.now().millisecondsSinceEpoch,
         }, SetOptions(merge: true));
       });
-      if (taken) throw const UsernameTaken();
+    });
+  }
+
+  @override
+  Future<void> releaseUsername() {
+    return _guard(() async {
+      await firestore.runTransaction((transaction) async {
+        final userSnap = await transaction.get(_user);
+        final data = userSnap.data();
+        if (data?[onboardedField] == true) return;
+        final username = data?[usernameField];
+        if (username is! String || username.isEmpty) return;
+
+        final ref = firestore.collection(usernamesCollection).doc(username);
+        final snap = await transaction.get(ref);
+        if (snap.exists && snap.data()?[usernameOwnerField] == userId) {
+          transaction.delete(ref);
+        }
+      });
     });
   }
 
   @override
   Future<void> completeOnboarding() {
     return _guard(() async {
-      await _user.set({onboardedField: true}, SetOptions(merge: true));
+      // A thrown error inside the handler is retried, which would multiply
+      // reads. Flags keep the failure outside the transaction.
+      var invalid = false;
+      var taken = false;
+      await firestore.runTransaction((transaction) async {
+        invalid = false;
+        taken = false;
+        final userSnap = await transaction.get(_user);
+        final data = userSnap.data();
+        final username = data?[usernameField];
+        final alias = data?[aliasField];
+        if (username is! String ||
+            alias is! String ||
+            !Username.isValid(username) ||
+            !Username.isAliasValid(alias)) {
+          invalid = true;
+          return;
+        }
+
+        final usernameRef = firestore
+            .collection(usernamesCollection)
+            .doc(username);
+        final usernameSnap = await transaction.get(usernameRef);
+        final owner = usernameSnap.data()?[usernameOwnerField];
+        if (usernameSnap.exists && owner != userId) {
+          taken = true;
+          return;
+        }
+
+        transaction.set(usernameRef, {
+          usernameOwnerField: userId,
+          aliasField: alias,
+        });
+        transaction.set(_user, {onboardedField: true}, SetOptions(merge: true));
+      });
+      if (invalid) throw ArgumentError('Invalid profile');
+      if (taken) throw const UsernameTaken();
     });
   }
 

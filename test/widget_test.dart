@@ -1480,7 +1480,7 @@ void main() {
     expect(find.text('Stay a little longer'), findsOneWidget);
     expect(
       find.text(
-        "This session hasn't reached 5 minutes, so it won't be saved to your history.",
+        "Sessions shorter than 5 minutes won't be recorded in your history.",
       ),
       findsOneWidget,
     );

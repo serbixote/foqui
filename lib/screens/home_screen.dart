@@ -13,8 +13,8 @@ import '../theme/app_theme.dart';
 import '../widgets/floating_tab_bar.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/session_bar_button.dart';
-import '../widgets/sheet_header.dart';
 import '../widgets/surface_card.dart';
+import 'sign_out_sheet.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -54,17 +54,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   }
 
   Future<void> _confirmSignOut() async {
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      useSafeArea: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      clipBehavior: Clip.antiAlias,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      builder: (context) => const _SignOutSheet(),
-    );
-    if (confirmed != true || !mounted) return;
+    final confirmed = await showSignOutSheet(context);
+    if (!confirmed || !mounted) return;
     try {
       final open = ref.read(focusControllerProvider).foregroundSession;
       if (open != null && open.outcome != SessionOutcome.created) {
@@ -208,65 +199,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             ),
         ],
       ),
-    );
-  }
-}
-
-class _SignOutSheet extends StatelessWidget {
-  const _SignOutSheet();
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const SizedBox(height: 10),
-        const SheetGrabber(),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, kSheetBottomPadding),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                tr('home_sign_out'),
-                style: theme.textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: -0.4,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                tr('home_sign_out_body'),
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.35,
-                ),
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, false),
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(56),
-                ),
-                child: Text(tr('home_sign_out_stay')),
-              ),
-              const SizedBox(height: 4),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                style: TextButton.styleFrom(
-                  foregroundColor: FoquiColors.destructive,
-                  minimumSize: const Size.fromHeight(48),
-                ),
-                child: Text(tr('home_sign_out')),
-              ),
-            ],
-          ),
-        ),
-      ],
     );
   }
 }

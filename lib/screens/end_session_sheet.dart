@@ -162,14 +162,16 @@ class ShortSessionNote extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final caution = FoquiColors.caution;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: FoquiColors.grouped,
+        color: caution.withValues(alpha: 0.16),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: caution.withValues(alpha: 0.72), width: 1.5),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -178,13 +180,13 @@ class ShortSessionNote extends StatelessWidget {
               height: 36,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: FoquiColors.violet.withValues(alpha: 0.16),
+                color: caution.withValues(alpha: 0.22),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
-                CupertinoIcons.time,
+                CupertinoIcons.exclamationmark_triangle_fill,
                 size: 18,
-                color: FoquiColors.violet,
+                color: FoquiColors.caution,
               ),
             ),
             const SizedBox(width: 12),
@@ -195,7 +197,8 @@ class ShortSessionNote extends StatelessWidget {
                   Text(
                     tr('end_short_title'),
                     style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w600,
+                      color: caution,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -205,7 +208,8 @@ class ShortSessionNote extends StatelessWidget {
                       args: ['${minimumRecordedLength.inMinutes}'],
                     ),
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.onSurfaceVariant,
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w500,
                       height: 1.35,
                     ),
                   ),

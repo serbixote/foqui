@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/tr.dart';
 import '../state/auth.dart';
 import '../widgets/sheet_header.dart';
+import '../widgets/welcome_frame.dart';
 
 const _scenes = [
   (labelKey: 'label_study', image: 'assets/images/foqui-study.png'),
@@ -63,19 +64,19 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final scene = _scenes[_focusIndex];
     final sceneLabel = tr(scene.labelKey);
 
-    return Scaffold(
+    return WelcomeFrame(
+      warm: false,
       // Onboarding signs out with the keyboard still open. This screen has
       // no fields, so that inset should not squash the column.
-      resizeToAvoidBottomInset: false,
-      body: SafeArea(
+      child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(28, 88, 28, 16),
           child: LayoutBuilder(
             builder: (context, constraints) {
+              final theme = Theme.of(context);
               return SingleChildScrollView(
                 physics: const ClampingScrollPhysics(),
                 child: ConstrainedBox(
@@ -105,7 +106,7 @@ class _SignInScreenState extends ConsumerState<SignInScreen> {
                                   tr('sign_in_blocks'),
                                   textAlign: TextAlign.center,
                                   style: theme.textTheme.titleMedium?.copyWith(
-                                    color: theme.colorScheme.onSurfaceVariant,
+                                    color: theme.colorScheme.onSurface,
                                     fontWeight: FontWeight.w500,
                                     height: 1.3,
                                   ),

@@ -52,12 +52,21 @@ service cloud.firestore {
         : false;
     }
 
+    // A finished account has to own its username document. A draft saved
+    // during onboarding does not, so leaving early does not hold the name.
     function usernameClaimHolds() {
       return !('username' in request.resource.data)
         ? true
         : validUsername(request.resource.data.username)
-          ? usernameOwned(request.resource.data.username)
+          ? request.resource.data.get('onboarded', false) == true
+            ? usernameOwned(request.resource.data.username)
+            : true
           : false;
+    }
+
+    function accountOnboarded() {
+      let path = /databases/$(database)/documents/users/$(request.auth.uid);
+      return getAfter(path).data.get('onboarded', false) == true;
     }
 
     function aliasHolds() {
@@ -67,7 +76,8 @@ service cloud.firestore {
     }
 
     // Document id is the username. Clients may get one name, never list
-    // the directory, so a uniqueness check stays one read.
+    // the directory, so a uniqueness check stays one read. The document
+    // exists only once onboarding is finished.
     match /usernames/{username} {
       allow get: if isSignedIn();
       allow list: if false;
@@ -77,6 +87,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['uid', 'alias'])
         && request.resource.data.uid == request.auth.uid
         && validAlias(request.resource.data.alias)
+        && accountOnboarded()
         && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username
         && releasedPrevious(username);
 
@@ -85,6 +96,7 @@ service cloud.firestore {
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.keys().hasOnly(['uid', 'alias'])
         && validAlias(request.resource.data.alias)
+        && accountOnboarded()
         && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username;
 
       allow delete: if isSignedIn() && resource.data.uid == request.auth.uid;

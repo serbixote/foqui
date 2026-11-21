@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,12 +16,33 @@ import '../state/auth.dart';
 import '../state/focus_controller.dart';
 import '../state/profile.dart';
 import '../theme/app_theme.dart';
+import '../widgets/welcome_frame.dart';
 import 'app_shell.dart';
 import 'sign_in_screen.dart';
+import 'sign_out_sheet.dart';
 
 const _usernamePause = Duration(milliseconds: 400);
 const _stepDuration = Duration(milliseconds: 320);
 const _stepTravel = 0.18;
+const _introLead = Duration(milliseconds: 280);
+const _introNext = Duration(milliseconds: 200);
+const _introBlink = Duration(milliseconds: 530);
+
+const _introParagraphKeys = [
+  'onboarding_intro_1',
+  'onboarding_intro_2',
+  'onboarding_intro_3',
+  'onboarding_intro_4',
+  'onboarding_intro_5',
+];
+
+const _stepArt = {
+  _Step.alias: 'assets/images/foqui.png',
+  _Step.username: 'assets/images/foqui-couple.png',
+  _Step.blockList: 'assets/images/foqui-study.png',
+  _Step.permission: 'assets/images/foqui-deep-work.png',
+  _Step.ready: 'assets/images/foqui-family.png',
+};
 
 /// Sends a signed-in person through onboarding until their profile is done.
 class SignedInGate extends ConsumerWidget {
@@ -76,7 +98,7 @@ class ProfileUnavailable extends ConsumerWidget {
   }
 }
 
-enum _Step { alias, username, permission, blockList }
+enum _Step { intro, alias, username, permission, blockList, ready }
 
 enum _HandleStatus { invalid, reserved, checking, available, taken, failed }
 
@@ -101,7 +123,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   );
   final String _listId = defaultBlockListId;
 
-  late int _stepIndex = widget.profile.username == null ? 0 : 2;
+  // Intro, alias, and username are the first three. A saved username resumes
+  // on whatever comes after them.
+  late int _stepIndex = widget.profile.username == null ? 0 : 3;
+  var _introShown = 1;
+  var _introCaughtUp = false;
+  var _releasedHold = false;
   bool? _includeList;
   Timer? _usernameTimer;
   var _usernameGeneration = 0;
@@ -115,8 +142,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   var _names = const <String>[];
   var _touchedPicker = false;
   var _savedList = false;
-  String? _permissionNote;
   String? _listNote;
+  var _artReady = false;
 
   int get _selectionCount => _apps + _categories + _websites;
 
@@ -136,6 +163,33 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (existing != null && existing == Username.normalize(_username.text)) {
       _handle = _HandleStatus.available;
       _checkedUsername = existing;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || _releasedHold) return;
+        _releasedHold = true;
+        unawaited(_releaseHold());
+      });
+    }
+  }
+
+  /// A username saved earlier is only a draft. Drop the directory document
+  /// so leaving again does not keep the name.
+  Future<void> _releaseHold() async {
+    final directory = ref.read(userRepositoryProvider);
+    if (directory == null) return;
+    try {
+      await directory.releaseUsername();
+    } catch (error, stack) {
+      debugPrint('Releasing username hold failed: $error\n$stack');
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_artReady) return;
+    _artReady = true;
+    for (final image in _stepArt.values) {
+      precacheImage(AssetImage(image), context);
     }
   }
 
@@ -153,10 +207,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   List<_Step> _steps() {
     return [
+      _Step.intro,
       _Step.alias,
       _Step.username,
-      if (_includeList ?? false) _Step.blockList,
       _Step.permission,
+      if (_includeList ?? false) _Step.blockList,
+      _Step.ready,
     ];
   }
 
@@ -178,13 +234,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     }
     if (!Username.isFormatValid(normalized)) {
       setState(() => _handle = _HandleStatus.invalid);
-      return;
-    }
-    if (normalized == widget.profile.username) {
-      setState(() {
-        _handle = _HandleStatus.available;
-        _checkedUsername = normalized;
-      });
       return;
     }
 
@@ -221,7 +270,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       await action();
     } on UsernameTaken {
       if (!mounted) return;
+      final usernameIndex = _steps().indexOf(_Step.username);
       setState(() => _handle = _HandleStatus.taken);
+      if (_stepIndex != usernameIndex) _goTo(usernameIndex);
     } on ProfileWriteException catch (error) {
       if (!mounted) return;
       _showMessage(
@@ -242,52 +293,41 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _continueFromAlias() {
-    if (!_canContinueAlias) return;
-    _goTo(1);
+  void _continueFromIntro() {
+    if (!_introCaughtUp) return;
+    if (_introShown < _introParagraphKeys.length) {
+      setState(() {
+        _introShown++;
+        _introCaughtUp = false;
+      });
+      return;
+    }
+    _goTo(_steps().indexOf(_Step.alias));
   }
 
-  Future<void> _claimAndContinue() {
+  void _continueFromAlias() {
+    if (!_canContinueAlias) return;
+    _goTo(_steps().indexOf(_Step.username));
+  }
+
+  Future<void> _saveAndContinue() {
     final alias = _alias.text.trim();
     final username = Username.normalize(_username.text);
     return _run(() async {
       await ref
           .read(userRepositoryProvider)!
-          .claimProfile(alias: alias, username: username);
+          .saveProfile(alias: alias, username: username);
       if (!mounted) return;
-      _goTo(2);
+      _goTo(_stepIndex + 1);
     });
   }
 
-  Future<void> _allowScreenTime() {
+  /// The username document is created here, together with finishing.
+  /// Saving it earlier would hold the name when someone never gets this far.
+  Future<void> _finish() {
     return _run(() async {
-      final current = ref.read(authorizationProvider).asData?.value;
-      if (current != null &&
-          (current.isAuthorized ||
-              current == FamilyControlsAuthorization.unavailable)) {
-        await _leavePermission();
-        return;
-      }
-      final status = await ref.read(authorizationProvider.notifier).request();
-      if (!mounted) return;
-      if (status.isAuthorized) {
-        await _leavePermission();
-        return;
-      }
-      setState(() {
-        _permissionNote = switch (status) {
-          FamilyControlsAuthorization.unavailable => tr(
-            'onboarding_permission_unavailable',
-          ),
-          FamilyControlsAuthorization.denied => tr('shield_not_authorized'),
-          _ => tr('home_screen_time_unknown'),
-        };
-      });
+      await ref.read(userRepositoryProvider)!.completeOnboarding();
     });
-  }
-
-  Future<void> _leavePermission() async {
-    await ref.read(userRepositoryProvider)!.completeOnboarding();
   }
 
   Future<void> _pickApps() async {
@@ -300,15 +340,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       final authorization = await ref
           .read(authorizationProvider.notifier)
           .request();
-      if (!mounted) return;
-      if (!authorization.isAuthorized) {
-        setState(() {
-          _listNote = authorization == FamilyControlsAuthorization.unavailable
-              ? tr('onboarding_permission_unavailable')
-              : tr('shield_not_authorized');
-        });
-        return;
-      }
+      if (!mounted || !authorization.isAuthorized) return;
       final counts = await ref
           .read(focusShieldBridgeProvider)
           .presentAppPicker(_listId);
@@ -372,7 +404,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           );
       _savedList = true;
       if (!mounted) return;
-      _goTo(_steps().indexOf(_Step.permission));
+      _goTo(_steps().indexOf(_Step.ready));
     });
   }
 
@@ -385,6 +417,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     });
   }
 
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showSignOutSheet(context);
+    if (!confirmed || !mounted) return;
+    await ref.read(authProvider.notifier).signOut();
+  }
+
   @override
   Widget build(BuildContext context) {
     final loaded = ref.watch(focusRepositoryProvider).hasLoaded;
@@ -393,7 +431,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       // A list saved on the account is not enough. This phone has to have
       // the apps, or onboarding asks for them instead of skipping ahead.
       if (!loaded || !focus.selectionsReady) {
-        return const Scaffold(body: Center(child: CircularProgressIndicator()));
+        return const WelcomeFrame(
+          child: Center(child: CircularProgressIndicator()),
+        );
       }
       _includeList = !focus.lists.any(
         (list) => list.id == defaultBlockListId && !list.isEmpty,
@@ -406,27 +446,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     final step = steps[index];
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      body: SafeArea(
+    return WelcomeFrame(
+      child: SafeArea(
         child: Padding(
           padding: EdgeInsets.fromLTRB(28, 12, 28, 16 + bottom),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _TopBar(
+                stepIndex: index,
+                stepCount: steps.length,
                 showBack: index > 0,
-                showSignOut: index == 0,
+                showSignOut: index > 0,
                 busy: _busy,
                 onBack: () => _goTo(index - 1),
-                onSignOut: () {
-                  FocusManager.instance.primaryFocus?.unfocus();
-                  ref.read(authProvider.notifier).signOut();
-                },
+                onSignOut: _confirmSignOut,
               ),
-              const SizedBox(height: 12),
-              _StepDots(index: index, count: steps.length),
-              const SizedBox(height: 28),
+              const SizedBox(height: 8),
               Expanded(
                 child: _StepSwitch(
                   step: step,
@@ -435,7 +471,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Expanded(
-                        child: SingleChildScrollView(child: _body(step)),
+                        child: step == _Step.intro
+                            ? _body(step, compact: bottom > 0)
+                            : SingleChildScrollView(
+                                child: _body(step, compact: bottom > 0),
+                              ),
                       ),
                       const SizedBox(height: 16),
                       ..._actions(step),
@@ -450,10 +490,21 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  Widget _body(_Step step) {
+  void _markIntroCaughtUp() {
+    if (!mounted || _introCaughtUp) return;
+    setState(() => _introCaughtUp = true);
+  }
+
+  Widget _body(_Step step, {required bool compact}) {
     return switch (step) {
+      _Step.intro => _IntroMessage(
+        shown: _introShown,
+        instant: _introCaughtUp && _introShown == _introParagraphKeys.length,
+        onCaughtUp: _markIntroCaughtUp,
+      ),
       _Step.alias => _AliasBody(
         alias: _alias,
+        compact: compact,
         canContinue: _canContinueAlias,
         onChanged: _onAliasChanged,
         onContinue: _continueFromAlias,
@@ -461,11 +512,13 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       _Step.username => _UsernameBody(
         username: _username,
         status: _handle,
+        compact: compact,
         canContinue: _canClaim,
         onChanged: _onUsernameChanged,
-        onContinue: _claimAndContinue,
+        onContinue: _saveAndContinue,
       ),
-      _Step.permission => _PermissionBody(note: _permissionNote),
+      _Step.ready => _ReadyBody(compact: compact),
+      _Step.permission => _PermissionBody(compact: compact),
       _Step.blockList => _BlockListBody(
         name: _listName,
         summary: BlockList(
@@ -478,6 +531,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         ).summary,
         note: _listNote,
         busy: _busy,
+        compact: compact,
         onNameChanged: (_) => setState(() {}),
         onPick: _pickApps,
       ),
@@ -486,6 +540,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
   List<Widget> _actions(_Step step) {
     return switch (step) {
+      _Step.intro => [
+        _PrimaryButton(
+          label: tr('onboarding_continue'),
+          busy: false,
+          enabled: _introCaughtUp,
+          hidden: !_introCaughtUp,
+          onPressed: _continueFromIntro,
+        ),
+      ],
       _Step.alias => [
         _PrimaryButton(
           label: tr('onboarding_continue'),
@@ -499,14 +562,23 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           label: tr('onboarding_continue'),
           busy: _busy,
           enabled: _canClaim,
-          onPressed: _claimAndContinue,
+          onPressed: _saveAndContinue,
+        ),
+      ],
+      _Step.ready => [
+        _PrimaryButton(
+          label: tr('onboarding_ready_start'),
+          busy: _busy,
+          enabled: !_busy,
+          onPressed: _finish,
         ),
       ],
       _Step.permission => [
-        _PermissionActions(
+        _PrimaryButton(
+          label: tr('onboarding_continue'),
           busy: _busy,
-          onAllow: _allowScreenTime,
-          onSkip: () => _run(_leavePermission),
+          enabled: !_busy,
+          onPressed: () => _goTo(_stepIndex + 1),
         ),
       ],
       _Step.blockList => [
@@ -524,6 +596,8 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
 
 class _TopBar extends StatelessWidget {
   const _TopBar({
+    required this.stepIndex,
+    required this.stepCount,
     required this.showBack,
     required this.showSignOut,
     required this.busy,
@@ -531,6 +605,8 @@ class _TopBar extends StatelessWidget {
     required this.onSignOut,
   });
 
+  final int stepIndex;
+  final int stepCount;
   final bool showBack;
   final bool showSignOut;
   final bool busy;
@@ -547,23 +623,41 @@ class _TopBar extends StatelessWidget {
       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
     );
-
     return SizedBox(
       height: 36,
       child: Row(
         children: [
-          _BarAction(
-            shown: showBack,
-            label: tr('common_back'),
-            style: style,
-            onPressed: busy ? null : onBack,
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: _BarAction(
+                shown: showBack,
+                label: tr('common_back'),
+                icon: CupertinoIcons.chevron_back,
+                style: style,
+                onPressed: busy ? null : onBack,
+              ),
+            ),
           ),
-          const Spacer(),
-          _BarAction(
-            shown: showSignOut,
-            label: tr('home_sign_out'),
-            style: style,
-            onPressed: busy ? null : onSignOut,
+          _StepDots(index: stepIndex, count: stepCount),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: showSignOut
+                    ? _BarAction(
+                        shown: true,
+                        label: tr('home_sign_out'),
+                        icon: CupertinoIcons.square_arrow_right,
+                        alignEnd: true,
+                        style: style,
+                        onPressed: busy ? null : onSignOut,
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
           ),
         ],
       ),
@@ -577,15 +671,37 @@ class _BarAction extends StatelessWidget {
     required this.label,
     required this.style,
     required this.onPressed,
+    this.icon,
+    this.alignEnd = false,
   });
 
   final bool shown;
   final String label;
   final ButtonStyle style;
   final VoidCallback? onPressed;
+  final IconData? icon;
+  final bool alignEnd;
 
   @override
   Widget build(BuildContext context) {
+    final button = icon == null
+        ? TextButton(onPressed: onPressed, style: style, child: Text(label))
+        : IconButton(
+            tooltip: label,
+            onPressed: onPressed,
+            style: IconButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
+              padding: EdgeInsets.zero,
+              fixedSize: const Size(36, 36),
+              minimumSize: const Size(36, 36),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              alignment: alignEnd
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+            ),
+            icon: Icon(icon, size: 22),
+          );
+
     return IgnorePointer(
       ignoring: !shown,
       child: ExcludeSemantics(
@@ -594,11 +710,7 @@ class _BarAction extends StatelessWidget {
           opacity: shown ? 1 : 0,
           duration: const Duration(milliseconds: 200),
           curve: Curves.easeOut,
-          child: TextButton(
-            onPressed: onPressed,
-            style: style,
-            child: Text(label),
-          ),
+          child: button,
         ),
       ),
     );
@@ -613,20 +725,21 @@ class _StepDots extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = Theme.of(context).colorScheme.primary;
+    final scheme = Theme.of(context).colorScheme;
     return Semantics(
       label: tr('onboarding_step', args: ['${index + 1}', '$count']),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           for (var i = 0; i < count; i++) ...[
             if (i > 0) const SizedBox(width: 6),
             AnimatedContainer(
               duration: _stepDuration,
               curve: Curves.easeOutCubic,
-              height: 4,
-              width: i == index ? 28 : 12,
+              height: 5,
+              width: i == index ? 28 : 8,
               decoration: BoxDecoration(
-                color: i <= index ? active : FoquiColors.raised,
+                color: i <= index ? scheme.primary : FoquiWelcome.track,
                 borderRadius: BorderRadius.circular(99),
               ),
             ),
@@ -686,15 +799,261 @@ class _StepSwitch extends StatelessWidget {
   }
 }
 
+/// Types one paragraph at a time, a character per tick, like someone writing.
+/// A tap finishes the paragraph that's in progress.
+class _IntroMessage extends StatefulWidget {
+  const _IntroMessage({
+    required this.shown,
+    required this.instant,
+    required this.onCaughtUp,
+  });
+
+  /// Paragraphs revealed so far, including the one being typed.
+  final int shown;
+
+  /// The whole message is already on screen. Used when coming back.
+  final bool instant;
+  final VoidCallback onCaughtUp;
+
+  @override
+  State<_IntroMessage> createState() => _IntroMessageState();
+}
+
+class _IntroMessageState extends State<_IntroMessage> {
+  late final List<String> _paragraphs = [
+    for (final key in _introParagraphKeys) tr(key),
+  ];
+  final ScrollController _scroll = ScrollController();
+  var _paragraph = 0;
+  var _count = 0;
+  var _settled = false;
+  var _cursorOn = true;
+  var _started = false;
+  var _reduceMotion = false;
+  Timer? _timer;
+  Timer? _blink;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    _reduceMotion = MediaQuery.disableAnimationsOf(context);
+    if (widget.instant) {
+      _showComplete();
+      return;
+    }
+    if (_reduceMotion) {
+      _showComplete();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onCaughtUp();
+      });
+      return;
+    }
+    _startBlink();
+    _schedule(_introLead);
+  }
+
+  @override
+  void didUpdateWidget(covariant _IntroMessage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.shown == oldWidget.shown) return;
+    _timer?.cancel();
+    _paragraph = widget.shown - 1;
+    _count = 0;
+    _settled = false;
+    if (_reduceMotion || widget.instant) {
+      _showComplete();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onCaughtUp();
+      });
+      return;
+    }
+    _startBlink();
+    _schedule(_introNext);
+    _follow(force: true);
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _blink?.cancel();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  void _showComplete() {
+    _timer?.cancel();
+    _blink?.cancel();
+    _paragraph = widget.shown - 1;
+    _count = _paragraphs[_paragraph].length;
+    _settled = true;
+  }
+
+  void _startBlink() {
+    _blink?.cancel();
+    _cursorOn = true;
+    _blink = Timer.periodic(_introBlink, (_) {
+      if (!mounted || _settled) return;
+      setState(() => _cursorOn = !_cursorOn);
+    });
+  }
+
+  void _schedule(Duration delay) {
+    _timer?.cancel();
+    _timer = Timer(delay, _advance);
+  }
+
+  void _advance() {
+    if (!mounted || _settled) return;
+    final text = _paragraphs[_paragraph];
+    if (_count >= text.length) {
+      _settle();
+      return;
+    }
+    final index = _count;
+    setState(() => _count++);
+    if (text[index].trim().isNotEmpty) HapticFeedback.selectionClick();
+    _schedule(_pace(text, index));
+    _follow();
+  }
+
+  /// A short pause after punctuation, and a little unevenness on the letters,
+  /// so the line feels typed rather than played back at one speed.
+  Duration _pace(String text, int index) {
+    final char = text[index];
+    final next = index + 1 < text.length ? text[index + 1] : '';
+    if ((char == '.' || char == '!' || char == '?') &&
+        (next.isEmpty || next == ' ')) {
+      return const Duration(milliseconds: 280);
+    }
+    if (char == ',') return const Duration(milliseconds: 150);
+    if (char == ' ') return const Duration(milliseconds: 28);
+    return Duration(milliseconds: 42 + char.codeUnitAt(0) % 3 * 12);
+  }
+
+  void _settle() {
+    if (_settled) return;
+    _timer?.cancel();
+    _blink?.cancel();
+    setState(() {
+      _settled = true;
+      _count = _paragraphs[_paragraph].length;
+    });
+    widget.onCaughtUp();
+  }
+
+  void _follow({bool force = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_scroll.hasClients) return;
+      final position = _scroll.position;
+      if (position.maxScrollExtent <= 0) return;
+      final nearBottom = position.pixels >= position.maxScrollExtent - 64;
+      if (!force && !nearBottom && position.pixels > 0) return;
+      position.jumpTo(position.maxScrollExtent);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final style = theme.textTheme.bodyLarge?.copyWith(
+      fontSize: 18,
+      fontWeight: FontWeight.w500,
+      height: 1.45,
+      letterSpacing: -0.2,
+    );
+    final shown = _paragraphs.take(widget.shown).toList();
+    return Semantics(
+      container: true,
+      label: shown.join('\n\n'),
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _settled ? null : _settle,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  DecoratedBox(
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: FoquiWelcome.stage,
+                    ),
+                    child: SizedBox.square(
+                      dimension: 52,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(6, 8, 6, 4),
+                        child: Image.asset(
+                          'assets/images/foqui.png',
+                          fit: BoxFit.contain,
+                          excludeFromSemantics: true,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Foqui',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: _scroll,
+                  child: Text.rich(
+                    TextSpan(
+                      style: style,
+                      children: [
+                        for (var i = 0; i < shown.length; i++) ...[
+                          if (i > 0) const TextSpan(text: '\n\n'),
+                          TextSpan(
+                            text: i < _paragraph
+                                ? _paragraphs[i]
+                                : _paragraphs[i].substring(0, _count),
+                          ),
+                        ],
+                        if (!_settled)
+                          TextSpan(
+                            text: '|',
+                            style: TextStyle(
+                              color: _cursorOn
+                                  ? theme.colorScheme.primary
+                                  : Colors.transparent,
+                              fontWeight: FontWeight.w400,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AliasBody extends StatelessWidget {
   const _AliasBody({
     required this.alias,
+    required this.compact,
     required this.canContinue,
     required this.onChanged,
     required this.onContinue,
   });
 
   final TextEditingController alias;
+  final bool compact;
   final bool canContinue;
   final ValueChanged<String> onChanged;
   final VoidCallback onContinue;
@@ -705,10 +1064,12 @@ class _AliasBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(tr('onboarding_alias_title'), style: _title(theme)),
-        const SizedBox(height: 10),
-        Text(tr('onboarding_alias_body'), style: _body(theme)),
-        const SizedBox(height: 28),
+        _StepIntro(
+          image: _stepArt[_Step.alias]!,
+          title: tr('onboarding_alias_title'),
+          body: tr('onboarding_alias_body'),
+          compact: compact,
+        ),
         TextField(
           controller: alias,
           autofocus: true,
@@ -737,6 +1098,7 @@ class _UsernameBody extends StatelessWidget {
   const _UsernameBody({
     required this.username,
     required this.status,
+    required this.compact,
     required this.canContinue,
     required this.onChanged,
     required this.onContinue,
@@ -744,6 +1106,7 @@ class _UsernameBody extends StatelessWidget {
 
   final TextEditingController username;
   final _HandleStatus? status;
+  final bool compact;
   final bool canContinue;
   final ValueChanged<String> onChanged;
   final VoidCallback onContinue;
@@ -754,10 +1117,12 @@ class _UsernameBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(tr('onboarding_username_title'), style: _title(theme)),
-        const SizedBox(height: 10),
-        Text(tr('onboarding_username_body'), style: _body(theme)),
-        const SizedBox(height: 28),
+        _StepIntro(
+          image: _stepArt[_Step.username]!,
+          title: tr('onboarding_username_title'),
+          body: tr('onboarding_username_body'),
+          compact: compact,
+        ),
         TextField(
           controller: username,
           autofocus: true,
@@ -796,82 +1161,55 @@ class _UsernameBody extends StatelessWidget {
   }
 }
 
-class _PermissionBody extends ConsumerWidget {
-  const _PermissionBody({required this.note});
+class _ReadyBody extends StatelessWidget {
+  const _ReadyBody({required this.compact});
 
-  final String? note;
+  final bool compact;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final status = ref.watch(authorizationProvider).asData?.value;
-    final message =
-        note ??
-        (status == FamilyControlsAuthorization.unavailable
-            ? tr('onboarding_permission_unavailable')
-            : null);
-
+  Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(tr('onboarding_permission_title'), style: _title(theme)),
-        const SizedBox(height: 10),
-        Text(tr('onboarding_permission_body'), style: _body(theme)),
-        if (message != null) ...[
-          const SizedBox(height: 16),
-          Text(message, style: _body(theme)),
-        ],
-      ],
-    );
-  }
-}
-
-class _PermissionActions extends ConsumerWidget {
-  const _PermissionActions({
-    required this.busy,
-    required this.onAllow,
-    required this.onSkip,
-  });
-
-  final bool busy;
-  final VoidCallback onAllow;
-  final VoidCallback onSkip;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(authorizationProvider).asData?.value;
-    final ready =
-        status != null &&
-        (status.isAuthorized ||
-            status == FamilyControlsAuthorization.unavailable);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _PrimaryButton(
-          label: ready
-              ? tr('onboarding_continue')
-              : tr('onboarding_permission_allow'),
-          busy: busy,
-          enabled: !busy,
-          onPressed: onAllow,
-        ),
-        const SizedBox(height: 4),
-        _SkipButton(
-          label: tr('onboarding_permission_skip'),
-          onPressed: busy ? null : onSkip,
+        _StepIntro(
+          image: _stepArt[_Step.ready]!,
+          title: tr('onboarding_ready_title'),
+          body: tr('onboarding_ready_body'),
+          compact: compact,
         ),
       ],
     );
   }
 }
 
-class _BlockListBody extends StatelessWidget {
+class _PermissionBody extends StatelessWidget {
+  const _PermissionBody({required this.compact});
+
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _StepIntro(
+          image: _stepArt[_Step.permission]!,
+          title: tr('onboarding_permission_title'),
+          body: tr('onboarding_permission_body'),
+          compact: compact,
+        ),
+      ],
+    );
+  }
+}
+
+class _BlockListBody extends ConsumerWidget {
   const _BlockListBody({
     required this.name,
     required this.summary,
     required this.note,
     required this.busy,
+    required this.compact,
     required this.onNameChanged,
     required this.onPick,
   });
@@ -880,19 +1218,34 @@ class _BlockListBody extends StatelessWidget {
   final String summary;
   final String? note;
   final bool busy;
+  final bool compact;
   final ValueChanged<String> onNameChanged;
   final VoidCallback onPick;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final status = ref.watch(authorizationProvider).asData?.value;
+    final required =
+        status != null &&
+        status != FamilyControlsAuthorization.approved &&
+        status != FamilyControlsAuthorization.unavailable;
+    final shown = switch (status) {
+      null || FamilyControlsAuthorization.approved => note,
+      FamilyControlsAuthorization.unavailable => tr(
+        'onboarding_permission_unavailable',
+      ),
+      _ => tr('onboarding_permission_required'),
+    };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(tr('onboarding_list_title'), style: _title(theme)),
-        const SizedBox(height: 10),
-        Text(tr('onboarding_list_body'), style: _body(theme)),
-        const SizedBox(height: 28),
+        _StepIntro(
+          image: _stepArt[_Step.blockList]!,
+          title: tr('onboarding_list_title'),
+          body: tr('onboarding_list_body'),
+          compact: compact,
+        ),
         TextField(
           controller: name,
           textCapitalization: TextCapitalization.sentences,
@@ -905,7 +1258,10 @@ class _BlockListBody extends StatelessWidget {
         const SizedBox(height: 12),
         Material(
           color: theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: theme.colorScheme.outlineVariant),
+          ),
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: busy ? null : onPick,
@@ -938,9 +1294,14 @@ class _BlockListBody extends StatelessWidget {
             ),
           ),
         ),
-        if (note != null) ...[
+        if (shown != null) ...[
           const SizedBox(height: 12),
-          Text(note!, style: _body(theme)),
+          Text(
+            shown,
+            style: _body(theme)?.copyWith(
+              color: required ? const Color(0xFF30D158) : null,
+            ),
+          ),
         ],
       ],
     );
@@ -962,11 +1323,11 @@ class _HandleLine extends StatelessWidget {
       ),
       _HandleStatus.invalid => (
         tr('onboarding_username_invalid'),
-        FoquiColors.destructive,
+        theme.colorScheme.error,
       ),
       _HandleStatus.reserved => (
         tr('onboarding_username_reserved'),
-        FoquiColors.destructive,
+        theme.colorScheme.error,
       ),
       _HandleStatus.checking => (
         tr('onboarding_username_checking'),
@@ -978,11 +1339,11 @@ class _HandleLine extends StatelessWidget {
       ),
       _HandleStatus.taken => (
         tr('onboarding_username_taken'),
-        FoquiColors.destructive,
+        theme.colorScheme.error,
       ),
       _HandleStatus.failed => (
         tr('onboarding_username_error'),
-        FoquiColors.destructive,
+        theme.colorScheme.error,
       ),
     };
     return Text(
@@ -998,51 +1359,39 @@ class _PrimaryButton extends StatelessWidget {
     required this.busy,
     required this.enabled,
     required this.onPressed,
+    this.hidden = false,
   });
 
   final String label;
   final bool busy;
   final bool enabled;
   final VoidCallback onPressed;
+  final bool hidden;
 
   @override
   Widget build(BuildContext context) {
     final onPrimary = Theme.of(context).colorScheme.onPrimary;
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 150),
-      opacity: enabled ? 1 : 0.45,
-      child: FilledButton(
-        onPressed: enabled ? onPressed : null,
-        child: busy
-            ? SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: onPrimary,
-                ),
-              )
-            : Text(label),
+    final shown = !hidden;
+    return ExcludeSemantics(
+      excluding: !shown,
+      child: AnimatedOpacity(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+        opacity: !shown ? 0 : (enabled ? 1 : 0.45),
+        child: FilledButton(
+          onPressed: shown && enabled ? onPressed : null,
+          child: busy
+              ? SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: onPrimary,
+                  ),
+                )
+              : Text(label),
+        ),
       ),
-    );
-  }
-}
-
-class _SkipButton extends StatelessWidget {
-  const _SkipButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        foregroundColor: Theme.of(context).colorScheme.onSurfaceVariant,
-        minimumSize: const Size.fromHeight(48),
-      ),
-      child: Text(label),
     );
   }
 }
@@ -1051,7 +1400,7 @@ TextStyle? _title(ThemeData theme) {
   return theme.textTheme.headlineMedium?.copyWith(
     fontWeight: FontWeight.w800,
     letterSpacing: -0.8,
-    height: 1.1,
+    height: 1.12,
   );
 }
 
@@ -1060,4 +1409,81 @@ TextStyle? _body(ThemeData theme) {
     color: theme.colorScheme.onSurfaceVariant,
     height: 1.35,
   );
+}
+
+class _StepIntro extends StatelessWidget {
+  const _StepIntro({
+    required this.image,
+    required this.title,
+    required this.body,
+    required this.compact,
+  });
+
+  final String image;
+  final String title;
+  final String body;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _StepArt(image: image, compact: compact),
+        Text(title, textAlign: TextAlign.start, style: _title(theme)),
+        const SizedBox(height: 10),
+        Text(body, textAlign: TextAlign.start, style: _body(theme)),
+        const SizedBox(height: 28),
+      ],
+    );
+  }
+}
+
+class _StepArt extends StatelessWidget {
+  const _StepArt({required this.image, required this.compact});
+
+  final String image;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: compact
+          ? const SizedBox(width: double.infinity)
+          : Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: SizedBox(
+                height: 188,
+                width: double.infinity,
+                child: Stack(
+                  alignment: Alignment.bottomCenter,
+                  children: [
+                    const Positioned(
+                      bottom: 10,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: FoquiWelcome.stage,
+                        ),
+                        child: SizedBox.square(dimension: 132),
+                      ),
+                    ),
+                    Positioned.fill(
+                      child: Image.asset(
+                        image,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.bottomCenter,
+                        excludeFromSemantics: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+    );
+  }
 }
