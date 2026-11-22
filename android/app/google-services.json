@@ -7,12 +7,17 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:486004582512:android:6a0dac90abc8e0d28a6cb5",
+        "mobilesdk_app_id": "1:486004582512:android:d85d67522d975dd88a6cb5",
         "android_client_info": {
-          "package_name": "com.example.foqui"
+          "package_name": "foqui.theboringbuilders.xyz"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "486004582512-8f8sftr498gjgopvs178ljgn285c3rjb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBGU_turnKeAcDA8czJrAaJwpLxHUwPnnE"
@@ -20,7 +25,20 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "486004582512-8f8sftr498gjgopvs178ljgn285c3rjb.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "486004582512-68b5rrvtm6a1bgv1jotooh6od4c3orfo.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "foqui.theboringbuilders.xyz",
+                "app_store_id": "6833774093"
+              }
+            }
+          ]
         }
       }
     }
