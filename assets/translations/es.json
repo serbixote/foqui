@@ -33,7 +33,7 @@
   "onboarding_permission_required": "El permiso de Tiempo en pantalla es necesario para que Foqui funcione.",
   "onboarding_permission_unavailable": "Este dispositivo no puede usar Tiempo en pantalla. Lo puedes configurar en un iPhone.",
   "onboarding_list_title": "Lista de bloqueo predeterminada",
-  "onboarding_list_body": "Elige las apps que quieres apartar. Puedes editarla después o crear nuevas listas de bloqueo para elegir.",
+  "onboarding_list_body": "Elige las apps que quieres apartar durante una sesión. No se bloquean hasta que empieces una.",
   "onboarding_profile_error": "No se pudo cargar tu perfil.",
   "onboarding_save_failed": "No se pudo guardar. Inténtalo de nuevo.",
   "onboarding_ready_title": "Todo listo",

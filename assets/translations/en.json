@@ -33,7 +33,7 @@
   "onboarding_permission_required": "Screen Time permission is necessary for Foqui to work.",
   "onboarding_permission_unavailable": "This device can't use Screen Time. You can set it up on an iPhone.",
   "onboarding_list_title": "Default block list",
-  "onboarding_list_body": "Pick the apps to put away. You can change it later, or create new block lists to choose from.",
+  "onboarding_list_body": "Pick the apps to put away during a session. Nothing is blocked until you start one.",
   "onboarding_profile_error": "Couldn't load your profile.",
   "onboarding_save_failed": "Couldn't save that. Try again.",
   "onboarding_ready_title": "All set",

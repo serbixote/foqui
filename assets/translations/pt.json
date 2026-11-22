@@ -33,7 +33,7 @@
   "onboarding_permission_required": "A permissão de Tempo de Uso é necessária para o Foqui funcionar.",
   "onboarding_permission_unavailable": "Este aparelho não usa Tempo de Uso. Dá para configurar num iPhone.",
   "onboarding_list_title": "Lista de bloqueio padrão",
-  "onboarding_list_body": "Escolha os apps para deixar de lado. Você pode editá-la depois ou criar novas listas de bloqueio para escolher.",
+  "onboarding_list_body": "Escolha os apps para deixar de lado durante uma sessão. Nada é bloqueado até você começar uma.",
   "onboarding_profile_error": "Não foi possível carregar seu perfil.",
   "onboarding_save_failed": "Não deu para salvar. Tente de novo.",
   "onboarding_ready_title": "Tudo pronto",

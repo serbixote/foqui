@@ -33,7 +33,7 @@
   "onboarding_permission_required": "Die Bildschirmzeit-Berechtigung ist nötig, damit Foqui funktioniert.",
   "onboarding_permission_unavailable": "Dieses Gerät kann die Bildschirmzeit nicht nutzen. Auf einem iPhone geht das.",
   "onboarding_list_title": "Standard-Blockliste",
-  "onboarding_list_body": "Such die Apps aus, die du weglegen willst. Du kannst sie später bearbeiten oder neue Blocklisten erstellen, aus denen du wählst.",
+  "onboarding_list_body": "Such die Apps aus, die du während einer Sitzung weglegen willst. Blockiert wird erst, wenn du eine startest.",
   "onboarding_profile_error": "Dein Profil konnte nicht geladen werden.",
   "onboarding_save_failed": "Das hat nicht geklappt. Versuch es noch mal.",
   "onboarding_ready_title": "Alles bereit",

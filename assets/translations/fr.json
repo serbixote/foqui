@@ -33,7 +33,7 @@
   "onboarding_permission_required": "L'autorisation Temps d'écran est nécessaire pour que Foqui fonctionne.",
   "onboarding_permission_unavailable": "Cet appareil ne gère pas Temps d'écran. Vous pourrez le faire sur un iPhone.",
   "onboarding_list_title": "Liste de blocage par défaut",
-  "onboarding_list_body": "Choisissez les apps à mettre de côté. Vous pourrez la modifier plus tard, ou créer de nouvelles listes de blocage à choisir.",
+  "onboarding_list_body": "Choisissez les apps à mettre de côté pendant une session. Rien n'est bloqué tant que vous n'en lancez pas une.",
   "onboarding_profile_error": "Impossible de charger votre profil.",
   "onboarding_save_failed": "Ça n'a pas été enregistré. Réessayez.",
   "onboarding_ready_title": "Tout est prêt",
