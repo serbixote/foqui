@@ -10,6 +10,7 @@ import '../models/block_list.dart';
 import '../services/focus_shield_bridge.dart';
 import '../state/focus_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/motion.dart';
 import '../widgets/sheet_header.dart';
 
 const _uuid = Uuid();
@@ -242,11 +243,17 @@ class _BlockListSheetState extends ConsumerState<BlockListSheet> {
                                     ),
                                   ),
                                   const SizedBox(height: 2),
-                                  Text(
-                                    summary,
-                                    style: theme.textTheme.bodyMedium?.copyWith(
-                                      color: theme.colorScheme.onSurfaceVariant,
-                                      height: 1.3,
+                                  MotionSwap(
+                                    switchKey: summary,
+                                    child: Text(
+                                      summary,
+                                      style: theme.textTheme.bodyMedium
+                                          ?.copyWith(
+                                            color: theme
+                                                .colorScheme
+                                                .onSurfaceVariant,
+                                            height: 1.3,
+                                          ),
                                     ),
                                   ),
                                 ],

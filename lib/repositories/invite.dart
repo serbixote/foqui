@@ -62,6 +62,7 @@ class InviteRepository extends Repository {
   /// Creates the shared room, the invite, and the host as a participant.
   Future<CreatedInvite> create({
     required String hostName,
+    required String username,
     required String title,
     required String? labelEmoji,
     required int? durationMinutes,
@@ -102,6 +103,7 @@ class InviteRepository extends Repository {
     batch.set(participant, {
       'uid': userId,
       'name': hostName,
+      'username': username,
       'joinedAt': FieldValue.serverTimestamp(),
       'inviteCode': code,
     });
@@ -133,16 +135,32 @@ class InviteRepository extends Repository {
     }
   }
 
-  Future<void> join({required SessionInvite invite, required String name}) {
+  Future<void> join({
+    required SessionInvite invite,
+    required String name,
+    required String username,
+  }) {
     return _session(invite.sessionId)
         .collection(participantsCollection)
         .doc(userId)
         .set({
           'uid': userId,
           'name': name,
+          'username': username,
           'joinedAt': FieldValue.serverTimestamp(),
           'inviteCode': invite.code,
         });
+  }
+
+  /// Writes this account's username onto an existing member document.
+  Future<void> publishUsername({
+    required String sessionId,
+    required String username,
+  }) {
+    return _session(sessionId)
+        .collection(participantsCollection)
+        .doc(userId)
+        .update({'username': username});
   }
 
   Future<void> activate({
@@ -289,10 +307,12 @@ SessionInvite _inviteFrom(String code, Map<String, dynamic> data) {
 }
 
 SessionParticipant _participantFrom(String id, Map<String, dynamic> data) {
+  final username = data['username'];
   return SessionParticipant(
     uid: data['uid'] as String? ?? id,
     name: data['name'] as String? ?? '',
     joinedAt: _readTime(data['joinedAt']),
+    username: username is String && username.isNotEmpty ? username : null,
   );
 }
 

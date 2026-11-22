@@ -84,6 +84,17 @@ class _JoinSessionSheetState extends ConsumerState<JoinSessionSheet> {
         _loading = false;
         _listId = _preferredListId();
       });
+      if (existing != null &&
+          !existing.isOver &&
+          !existing.canStart &&
+          _alreadyHere(ref.read(focusControllerProvider), existing.id)) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        return;
+      }
+      if (existing != null && !existing.isOver && !existing.canStart) {
+        await _enterWaitingRoom(existing, automatic: true);
+      }
     } catch (error, stack) {
       debugPrint('Could not open the invitation: $error\n$stack');
       _fail(InviteProblem.failed);
@@ -112,18 +123,22 @@ class _JoinSessionSheetState extends ConsumerState<JoinSessionSheet> {
   Future<void> _join() async {
     final invite = _invite;
     final repository = ref.read(inviteRepositoryProvider);
-    final alias = ref.read(userProfileProvider).asData?.value.alias?.trim();
+    final profile = ref.read(userProfileProvider).asData?.value;
+    final alias = profile?.alias?.trim();
+    final username = profile?.username?.trim();
     if (invite == null ||
         repository == null ||
         alias == null ||
-        alias.isEmpty) {
+        alias.isEmpty ||
+        username == null ||
+        username.isEmpty) {
       _fail(InviteProblem.failed);
       return;
     }
     setState(() => _busy = true);
     try {
       try {
-        await repository.join(invite: invite, name: alias);
+        await repository.join(invite: invite, name: alias, username: username);
       } on FirebaseException catch (error) {
         if (error.code != 'already-exists') rethrow;
       }
@@ -135,6 +150,17 @@ class _JoinSessionSheetState extends ConsumerState<JoinSessionSheet> {
         _busy = false;
         _listId ??= _preferredListId();
       });
+      if (session != null &&
+          !session.isOver &&
+          !session.canStart &&
+          _alreadyHere(ref.read(focusControllerProvider), session.id)) {
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        return;
+      }
+      if (session != null && !session.isOver && !session.canStart) {
+        await _enterWaitingRoom(session, automatic: true);
+      }
     } on FirebaseException catch (error, stack) {
       debugPrint('Could not join the session: $error\n$stack');
       _fail(
@@ -145,6 +171,54 @@ class _JoinSessionSheetState extends ConsumerState<JoinSessionSheet> {
     } catch (error, stack) {
       debugPrint('Could not join the session: $error\n$stack');
       _fail(InviteProblem.failed);
+    }
+  }
+
+  /// Opens the same unstarted session the host is looking at.
+  ///
+  /// One block list is used immediately. Several stay on this sheet so the
+  /// person can choose which apps this phone will block.
+  Future<void> _enterWaitingRoom(
+    SharedSession shared, {
+    required bool automatic,
+  }) async {
+    final invite = _invite;
+    if (invite == null || !mounted) return;
+    final focus = ref.read(focusControllerProvider);
+    if (_alreadyHere(focus, shared.id)) {
+      Navigator.of(context).pop();
+      return;
+    }
+    if (focus.foregroundSession != null) return;
+    final lists = _usableLists();
+    if (lists.isEmpty) return;
+    if (automatic && lists.length != 1) return;
+    final listId = _listId ?? lists.first.id;
+    setState(() => _busy = true);
+    try {
+      final opened = await ref
+          .read(focusControllerProvider.notifier)
+          .holdJoinedSession(
+            listId: listId,
+            shared: shared,
+            inviteCode: invite.code,
+          );
+      if (!mounted) return;
+      if (opened) {
+        Navigator.of(context).pop();
+        return;
+      }
+      setState(() => _busy = false);
+    } on FocusShieldException catch (error, stack) {
+      debugPrint('Could not open the joined session: $error\n$stack');
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (error.code == 'NOT_AUTHORIZED') {
+        await showScreenTimeSheet(context);
+      }
+    } catch (error, stack) {
+      debugPrint('Could not open the joined session: $error\n$stack');
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -262,7 +336,7 @@ class _JoinSessionSheetState extends ConsumerState<JoinSessionSheet> {
         else if (shared == null || shared.isOver)
           _Message(text: tr('invite_ended'))
         else if (!shared.canStart)
-          _Message(text: tr('invite_waiting'))
+          _waitingJoin(shared)
         else if (blocked)
           _Message(text: tr('invite_busy'))
         else
@@ -271,9 +345,39 @@ class _JoinSessionSheetState extends ConsumerState<JoinSessionSheet> {
     );
   }
 
+  Widget _waitingJoin(SharedSession shared) {
+    final focus = ref.watch(focusControllerProvider);
+    if (focus.foregroundSession != null) {
+      return _Message(text: tr('invite_busy'));
+    }
+    final lists = _usableLists();
+    if (lists.isEmpty) return _Message(text: tr('invite_no_lists'));
+    if (lists.length == 1 && _busy) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    return _listPicker(
+      buttonLabel: tr('common_done'),
+      onPressed: () => _enterWaitingRoom(shared, automatic: false),
+    );
+  }
+
   Widget _startBlock(SharedSession shared) {
     final lists = _usableLists();
     if (lists.isEmpty) return _Message(text: tr('invite_no_lists'));
+    return _listPicker(
+      buttonLabel: tr('session_start_focus'),
+      onPressed: () => _start(shared),
+    );
+  }
+
+  Widget _listPicker({
+    required String buttonLabel,
+    required VoidCallback onPressed,
+  }) {
+    final lists = _usableLists();
     final selected = _listId ?? lists.first.id;
 
     return Column(
@@ -301,8 +405,8 @@ class _JoinSessionSheetState extends ConsumerState<JoinSessionSheet> {
         ],
         const SizedBox(height: 8),
         FilledButton(
-          onPressed: _busy ? null : () => _start(shared),
-          child: Text(_busy ? tr('common_saving') : tr('session_start_focus')),
+          onPressed: _busy ? null : onPressed,
+          child: Text(_busy ? tr('common_saving') : buttonLabel),
         ),
       ],
     );

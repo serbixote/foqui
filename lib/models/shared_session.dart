@@ -79,11 +79,24 @@ class SessionParticipant {
     required this.uid,
     required this.name,
     required this.joinedAt,
+    this.username,
   });
 
   final String uid;
+
+  /// Alias shown for this member.
   final String name;
   final DateTime? joinedAt;
+
+  /// Account username, without a leading @.
+  final String? username;
+}
+
+/// Alias, with the username in parentheses when the room has one.
+String memberLabel(String alias, String? username) {
+  final handle = username?.trim();
+  if (handle == null || handle.isEmpty) return alias;
+  return '$alias ($handle)';
 }
 
 /// A pause the group has been asked to accept.
@@ -168,6 +181,26 @@ int? sharedDurationMinutes(FocusSession session) {
   final minutes = end.difference(session.startedAt).inMinutes;
   if (minutes < minSessionMinutes || minutes > maxSessionMinutes) return null;
   return minutes;
+}
+
+/// Start time stored on the shared room.
+///
+/// A session that has not been started keeps a local start only so the planned
+/// length can be measured. That clock has not begun. Writing it would make the
+/// room look underway, and a start that is no longer "now" is rejected.
+DateTime? sharedRoomStartedAt(FocusSession session) {
+  if (session.outcome == SessionOutcome.created) return null;
+  return session.startedAt;
+}
+
+/// End time stored on the shared room.
+///
+/// Same as [sharedRoomStartedAt]: the local end of a session that has not
+/// started is the planned length, not a deadline. An end that is already past
+/// is rejected, so the share button would do nothing.
+DateTime? sharedRoomEndsAt(FocusSession session) {
+  if (session.outcome == SessionOutcome.created) return null;
+  return session.endsAt;
 }
 
 /// Active sessions expire when they end. Waiting and open ones last a day.

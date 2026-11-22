@@ -181,6 +181,9 @@ List<FocusSession> trimSessions(List<FocusSession> sessions) {
 /// Finished sessions shorter than this never join history or stats.
 const minimumRecordedLength = Duration(minutes: 5);
 
+/// Pause stays unavailable until the session has run longer than this.
+const minimumPauseLength = Duration(minutes: 20);
+
 /// Drops finished sessions that ran for less than [minimumRecordedLength].
 ///
 /// A session is part of the record once it has been going that long.
@@ -204,14 +207,26 @@ bool sessionMeetsRecordedLength(FocusSession session, DateTime now) {
   return length != null && length >= minimumRecordedLength;
 }
 
+/// True when the user may stop [session].
+///
+/// Stopping stays unavailable until the session has run for
+/// [minimumRecordedLength]. Time spent paused does not count.
+bool canStopSession(FocusSession session, DateTime now) {
+  if (session.outcome != SessionOutcome.active &&
+      session.outcome != SessionOutcome.paused) {
+    return false;
+  }
+  return sessionMeetsRecordedLength(session, now);
+}
+
 /// True when the user may pause [session].
 ///
 /// Pausing lifts the shield, so it stays unavailable until the session has
-/// run for longer than [minimumRecordedLength].
+/// run for longer than [minimumPauseLength].
 bool canPauseSession(FocusSession session, DateTime now) {
   if (session.outcome != SessionOutcome.active) return false;
   final length = _runLength(session, now);
-  return length != null && length > minimumRecordedLength;
+  return length != null && length > minimumPauseLength;
 }
 
 bool _isRecorded(FocusSession session, DateTime now) {

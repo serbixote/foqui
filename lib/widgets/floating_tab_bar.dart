@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 
 import '../l10n/tr.dart';
 import 'floating_chrome.dart';
+import 'motion.dart';
 
 const double kFloatingBarBottomGap = 24;
 const double kFloatingBarHorizontalInset = 20;
@@ -134,10 +135,14 @@ class _TabButton extends StatelessWidget {
               borderRadius: BorderRadius.circular(999),
             ),
             child: Center(
-              child: Icon(
-                selected ? spec.selectedIcon : spec.icon,
-                size: 26,
-                color: color,
+              child: MotionSwap(
+                switchKey: selected,
+                alignment: Alignment.center,
+                child: Icon(
+                  selected ? spec.selectedIcon : spec.icon,
+                  size: 26,
+                  color: color,
+                ),
               ),
             ),
           ),

@@ -16,6 +16,30 @@ Future<bool> showPauseRequestSheet(BuildContext context) {
   return _showSheet(context, const _PauseRequestSheet());
 }
 
+/// Explains that pause stays closed until the session has run long enough.
+Future<void> showPauseWaitSheet(BuildContext context) {
+  return _showInfoSheet(context, const _PauseWaitSheet());
+}
+
+/// Explains that stopping stays closed until the session has run long enough.
+Future<void> showStopWaitSheet(BuildContext context) {
+  return _showInfoSheet(context, const _StopWaitSheet());
+}
+
+Future<void> _showInfoSheet(BuildContext context, Widget sheet) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    clipBehavior: Clip.antiAlias,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+    ),
+    builder: (context) => sheet,
+  );
+}
+
 /// Confirms leaving a shared session. The other members keep going.
 Future<bool> showLeaveSessionSheet(BuildContext context) {
   return _showSheet(context, const _LeaveSessionSheet());
@@ -69,6 +93,78 @@ class _PauseRequestSheet extends StatelessWidget {
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
           style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          child: Text(tr('end_keep')),
+        ),
+      ],
+    );
+  }
+}
+
+class _PauseWaitSheet extends StatelessWidget {
+  const _PauseWaitSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final minutes = '${minimumPauseLength.inMinutes}';
+    return _SheetFrame(
+      children: [
+        Text(
+          tr('pause_wait_title'),
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.4,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          tr('pause_wait_body', args: [minutes]),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
+          child: Text(tr('end_keep')),
+        ),
+      ],
+    );
+  }
+}
+
+class _StopWaitSheet extends StatelessWidget {
+  const _StopWaitSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final minutes = '${minimumRecordedLength.inMinutes}';
+    return _SheetFrame(
+      children: [
+        Text(
+          tr('stop_wait_title'),
+          style: theme.textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.4,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Text(
+          tr('stop_wait_body', args: [minutes]),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+            height: 1.35,
+          ),
+        ),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
           child: Text(tr('end_keep')),
         ),
       ],

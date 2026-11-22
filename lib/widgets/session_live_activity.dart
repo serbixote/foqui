@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:ui';
 
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +13,7 @@ import '../models/block_list.dart';
 import '../models/focus_label.dart';
 import '../models/focus_session.dart';
 import '../models/shared_session.dart';
+import '../models/user_profile.dart';
 import '../repositories/invite.dart';
 import '../screens/end_session_sheet.dart';
 import '../screens/screen_time_sheet.dart';
@@ -18,20 +21,19 @@ import '../screens/shared_session_sheets.dart';
 import '../state/auth.dart';
 import '../services/focus_shield_bridge.dart';
 import '../state/focus_controller.dart';
+import '../state/profile.dart';
 import '../theme/app_theme.dart';
+import 'motion.dart';
 import 'sheet_header.dart';
 
 const _liveGreen = Color(0xFF30D158);
 
-/// Shown until a shared room has published its members.
-List<String> get _sessionMembers => [tr('session_you')];
-
 /// Session sheet over the app.
 ///
-/// The shell keeps this over every screen while a session is on screen, and
-/// the sheet uses the height under the status bar. A session that has not
-/// been started yet uses the same sheet with the clock held. Starting it is
-/// what makes the timer run.
+/// The shell keeps this mounted. It rises in when a session is created or
+/// started, and settles back when the session is stopped or left. A session
+/// that has not been started yet uses the same sheet with the clock held.
+/// Starting it is what makes the timer run.
 class SessionLiveActivity extends ConsumerStatefulWidget {
   const SessionLiveActivity({super.key});
 
@@ -50,6 +52,11 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
     vsync: this,
     duration: const Duration(milliseconds: 1600),
   );
+  late final AnimationController _presence;
+  late final CurvedAnimation _fade;
+  late final Animation<Offset> _rise;
+  FocusSession? _held;
+  var _presenceQueued = false;
   Timer? _ticker;
   var _live = false;
   var _waiting = false;
@@ -57,11 +64,29 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
   var _open = false;
   var _busy = false;
   var _pausing = false;
+  String? _publishedUsername;
+  var _usernamePublishScheduled = false;
   String? _appliedGroupPause;
 
   @override
   void initState() {
     super.initState();
+    _presence = AnimationController(vsync: this, duration: kMotionSheet);
+    _fade = CurvedAnimation(
+      parent: _presence,
+      curve: kMotionCurve,
+      reverseCurve: Curves.easeInCubic,
+    );
+    _rise = Tween<Offset>(
+      begin: const Offset(0, 1),
+      end: Offset.zero,
+    ).animate(_fade);
+    _presence.addStatusListener(_onPresence);
+    final open = ref.read(focusControllerProvider).foregroundSession;
+    if (open != null) {
+      _held = open;
+      _presence.value = 1;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _sync(ref.read(focusControllerProvider).foregroundSession);
@@ -71,9 +96,62 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
   @override
   void dispose() {
     _ticker?.cancel();
+    _presence.removeStatusListener(_onPresence);
+    _fade.dispose();
+    _presence.dispose();
     _pulse.dispose();
     _slide.dispose();
     super.dispose();
+  }
+
+  void _onPresence(AnimationStatus status) {
+    if (status != AnimationStatus.dismissed || !mounted) return;
+    if (ref.read(focusControllerProvider).foregroundSession != null) return;
+    if (_held == null) return;
+    setState(() => _held = null);
+  }
+
+  /// Keeps the last sheet on screen long enough to slide it away.
+  void _track(FocusSession? live) {
+    if (live != null) {
+      _held = live;
+      final settling =
+          _presence.status == AnimationStatus.reverse ||
+          (_presence.value < 1 && !_presence.isAnimating);
+      if (settling) _queuePresence();
+      return;
+    }
+    if (_held != null &&
+        _presence.value > 0 &&
+        _presence.status != AnimationStatus.reverse) {
+      _queuePresence();
+    }
+  }
+
+  void _queuePresence() {
+    if (_presenceQueued) return;
+    _presenceQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _presenceQueued = false;
+      if (!mounted) return;
+      final live = ref.read(focusControllerProvider).foregroundSession;
+      final reduced = MediaQuery.disableAnimationsOf(context);
+      if (live != null) {
+        _held = live;
+        if (reduced || _presence.value == 1) {
+          _presence.value = 1;
+          return;
+        }
+        _presence.forward();
+        return;
+      }
+      if (_held == null) return;
+      if (reduced) {
+        _presence.value = 0;
+        return;
+      }
+      if (_presence.value > 0) _presence.reverse();
+    });
   }
 
   void _sync(FocusSession? session) {
@@ -129,9 +207,27 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
   Future<void> _begin(FocusSession session) async {
     setState(() => _busy = true);
     try {
-      await ref
-          .read(focusControllerProvider.notifier)
-          .startSession(sessionId: session.id);
+      final joined = session.sharedSessionId != null && !session.sharedHost;
+      if (joined) {
+        final shared = ref
+            .read(sharedSessionProvider(session.sharedSessionId!))
+            .asData
+            ?.value;
+        final code = session.inviteCode;
+        if (shared == null || !shared.canStart || code == null) return;
+        final started = await ref
+            .read(focusControllerProvider.notifier)
+            .startJoinedSession(
+              listId: session.blockListId,
+              shared: shared,
+              inviteCode: code,
+            );
+        if (!started) return;
+      } else {
+        await ref
+            .read(focusControllerProvider.notifier)
+            .startSession(sessionId: session.id);
+      }
       HapticFeedback.mediumImpact();
     } on FocusShieldException catch (error, stack) {
       debugPrint('Could not start the session: $error\n$stack');
@@ -156,6 +252,11 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
   }
 
   Future<void> _pause(FocusSession session, {required bool group}) async {
+    if (session.outcome != SessionOutcome.paused &&
+        !canPauseSession(session, DateTime.now())) {
+      await showPauseWaitSheet(context);
+      return;
+    }
     if (group && session.outcome != SessionOutcome.paused) {
       final confirmed = await showPauseRequestSheet(context);
       if (!confirmed || !mounted) return;
@@ -191,6 +292,10 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
   }
 
   Future<void> _leave(FocusSession session) async {
+    if (!canStopSession(session, DateTime.now())) {
+      await showStopWaitSheet(context);
+      return;
+    }
     final confirmed = await showLeaveSessionSheet(context);
     if (!confirmed || !mounted) return;
     final userId = ref.read(authProvider).userId;
@@ -246,7 +351,49 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
     return '${request.requestedBy}:${request.createdAt?.millisecondsSinceEpoch ?? 0}';
   }
 
+  /// Puts this account's username on the member document when it is missing.
+  Future<void> _publishOwnUsername(String sharedId) async {
+    if (sharedId.isEmpty || Firebase.apps.isEmpty) return;
+    final username = ref
+        .read(userProfileProvider)
+        .asData
+        ?.value
+        .username
+        ?.trim();
+    final userId = ref.read(authProvider).userId;
+    if (username == null || username.isEmpty || userId == null) return;
+    if (_publishedUsername == username) return;
+    final people = ref.read(participantsProvider(sharedId)).asData?.value;
+    if (people == null) return;
+    SessionParticipant? self;
+    for (final person in people) {
+      if (person.uid == userId) {
+        self = person;
+        break;
+      }
+    }
+    if (self == null) return;
+    if (self.username == username) {
+      _publishedUsername = username;
+      return;
+    }
+    final repository = ref.read(inviteRepositoryProvider);
+    if (repository == null) return;
+    _publishedUsername = username;
+    try {
+      await repository.publishUsername(sessionId: sharedId, username: username);
+    } catch (error, stack) {
+      debugPrint('Could not publish username: $error\n$stack');
+      if (mounted) _publishedUsername = null;
+    }
+  }
+
   Future<void> _end() async {
+    final session = ref.read(focusControllerProvider).foregroundSession;
+    if (session != null && !canStopSession(session, DateTime.now())) {
+      await showStopWaitSheet(context);
+      return;
+    }
     final confirmed = await showEndSessionSheet(context);
     if (!confirmed || !mounted) return;
     setState(() => _busy = true);
@@ -260,7 +407,9 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
   @override
   Widget build(BuildContext context) {
     final focus = ref.watch(focusControllerProvider);
-    final session = focus.foregroundSession;
+    final live = focus.foregroundSession;
+    _track(live);
+    final session = live ?? _held;
     final labels = focus.labels;
     final waiting = session?.outcome == SessionOutcome.created;
     ref.listen(focusControllerProvider, (previous, next) {
@@ -272,6 +421,16 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
       final current = ref.read(focusControllerProvider).foregroundSession;
       if (shared == null || current == null || current.sharedHost) return;
       if (current.sharedSessionId != shared.id) return;
+      if (current.outcome == SessionOutcome.created) {
+        if (shared.isOver) {
+          unawaited(
+            ref
+                .read(focusControllerProvider.notifier)
+                .discardSession(current.id),
+          );
+        }
+        return;
+      }
       final endsAt = shared.endsAt;
       final due = endsAt != null && !endsAt.isAfter(DateTime.now());
       if (shared.status == SharedSessionStatus.ended || due) {
@@ -279,15 +438,24 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
       }
     });
     final members = ref.watch(participantsProvider(sharedId));
+    final shared = ref.watch(sharedSessionProvider(sharedId)).asData?.value;
+    final waitingForHost =
+        waiting &&
+        session?.sharedSessionId != null &&
+        session?.sharedHost == false &&
+        shared?.canStart != true;
     final request = ref.watch(pauseRequestProvider(sharedId)).asData?.value;
     ref.listen(pauseRequestProvider(sharedId), (_, _) {
       _applyGroupPause(sharedId);
     });
     ref.listen(participantsProvider(sharedId), (_, _) {
       _applyGroupPause(sharedId);
+      unawaited(_publishOwnUsername(sharedId));
     });
 
-    if (session == null) return const SizedBox.shrink();
+    if (session == null) {
+      return const IgnorePointer(child: SizedBox.expand());
+    }
 
     final scheme = Theme.of(context).colorScheme;
     final now = DateTime.now();
@@ -310,8 +478,27 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
       }
     }
     final userId = ref.watch(authProvider).userId ?? '';
+    // Widget tests sign in without Firebase. The profile read needs it.
+    final profile = Firebase.apps.isEmpty
+        ? null
+        : ref.watch(userProfileProvider).asData?.value;
+    final handle = profile?.username?.trim();
+    if (!_usernamePublishScheduled &&
+        Firebase.apps.isNotEmpty &&
+        sharedId.isNotEmpty &&
+        handle != null &&
+        handle.isNotEmpty &&
+        people.any(
+          (person) => person.uid == userId && person.username != handle,
+        )) {
+      _usernamePublishScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_publishOwnUsername(sharedId));
+      });
+    }
 
-    return Semantics(
+    final sheet = Semantics(
       container: true,
       label: tr(
         'session_semantics',
@@ -399,7 +586,12 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
                   padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
                   children: [
                     _MemberList(
-                      names: _namesFor(session, members),
+                      members: _membersFor(
+                        session,
+                        members,
+                        userId: userId,
+                        profile: profile,
+                      ),
                       session: session,
                     ),
                   ],
@@ -410,44 +602,63 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (voteOpen) ...[
-                      _PauseVote(
-                        request: request,
-                        userId: userId,
-                        busy: _busy,
-                        onAccept: () => _vote(accept: true),
-                        onDecline: () => _vote(accept: false),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    waiting
-                        ? _WaitingActions(
-                            busy: _busy,
-                            onStart: () => _begin(session),
-                            onCancel: () => _cancel(session),
-                          )
-                        : _RunningActions(
-                            busy: _busy,
-                            pausing: _pausing,
-                            paused: paused,
-                            canPause:
-                                !voteOpen &&
-                                (paused || canPauseSession(session, now)),
-                            pauseMessage: voteOpen
-                                ? tr('pause_request_waiting')
-                                : null,
-                            onPause: () => _pause(session, group: group),
-                            onStop: group ? () => _leave(session) : _end,
-                            stopLabel: group
-                                ? tr('session_leave')
-                                : tr('session_stop'),
-                            stopTooltip: group
-                                ? tr('session_leave_action')
-                                : tr('end_confirm'),
-                            stopIcon: group
-                                ? CupertinoIcons.person_crop_circle_badge_minus
-                                : CupertinoIcons.stop_fill,
-                          ),
+                    AnimatedSize(
+                      duration: kMotion,
+                      curve: kMotionCurve,
+                      alignment: Alignment.topCenter,
+                      child: voteOpen
+                          ? Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: _PauseVote(
+                                request: request,
+                                userId: userId,
+                                busy: _busy,
+                                onAccept: () => _vote(accept: true),
+                                onDecline: () => _vote(accept: false),
+                              ),
+                            )
+                          : const SizedBox(width: double.infinity),
+                    ),
+                    MotionSwap(
+                      switchKey: waiting ? 'waiting' : 'running',
+                      child: waiting
+                          ? _WaitingActions(
+                              busy: _busy,
+                              canStart: !waitingForHost,
+                              onStart: () => _begin(session),
+                              onCancel: () => _cancel(session),
+                            )
+                          : _RunningActions(
+                              busy: _busy,
+                              pausing: _pausing,
+                              paused: paused,
+                              canPause:
+                                  !voteOpen &&
+                                  (paused || canPauseSession(session, now)),
+                              pauseMessage: voteOpen
+                                  ? tr('pause_request_waiting')
+                                  : null,
+                              onPause: () => _pause(session, group: group),
+                              onStop: group ? () => _leave(session) : _end,
+                              stopLabel: group
+                                  ? tr('session_leave')
+                                  : tr('session_stop'),
+                              stopTooltip: canStopSession(session, now)
+                                  ? (group
+                                        ? tr('session_leave_action')
+                                        : tr('end_confirm'))
+                                  : tr(
+                                      'session_stop_wait',
+                                      args: [
+                                        '${minimumRecordedLength.inMinutes}',
+                                      ],
+                                    ),
+                              stopIcon: group
+                                  ? CupertinoIcons
+                                        .person_crop_circle_badge_minus
+                                  : CupertinoIcons.stop_fill,
+                            ),
+                    ),
                   ],
                 ),
               ),
@@ -455,6 +666,16 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
           ),
         ),
       ),
+    );
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        FadeTransition(opacity: _fade, child: const _SessionVeil()),
+        Padding(
+          padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+          child: SlideTransition(position: _rise, child: sheet),
+        ),
+      ],
     );
   }
 
@@ -543,10 +764,12 @@ class _RunningActions extends StatelessWidget {
                     ? tr('session_pause_action')
                     : tr(
                         'session_pause_wait',
-                        args: ['${minimumRecordedLength.inMinutes}'],
+                        args: ['${minimumPauseLength.inMinutes}'],
                       )),
             child: FilledButton.icon(
-              onPressed: busy || !canPause ? null : onPause,
+              onPressed: busy || (pauseMessage != null && !canPause)
+                  ? null
+                  : onPause,
               style: FilledButton.styleFrom(
                 backgroundColor: FoquiColors.raised,
                 foregroundColor: scheme.onSurface,
@@ -556,20 +779,36 @@ class _RunningActions extends StatelessWidget {
                 ),
                 minimumSize: const Size.fromHeight(52),
               ),
-              icon: pausing
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        color: scheme.onSurface,
+              icon: MotionSwap(
+                switchKey: pausing
+                    ? 'busy'
+                    : paused
+                    ? 'resume'
+                    : 'pause',
+                alignment: Alignment.center,
+                child: pausing
+                    ? SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: scheme.onSurface,
+                        ),
+                      )
+                    : Icon(
+                        paused
+                            ? CupertinoIcons.play_fill
+                            : CupertinoIcons.pause,
+                        size: 16,
                       ),
-                    )
-                  : Icon(
-                      paused ? CupertinoIcons.play_fill : CupertinoIcons.pause,
-                      size: 16,
-                    ),
-              label: Text(paused ? tr('session_resume') : tr('session_pause')),
+              ),
+              label: MotionSwap(
+                switchKey: paused,
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  paused ? tr('session_resume') : tr('session_pause'),
+                ),
+              ),
             ),
           ),
         ),
@@ -588,16 +827,20 @@ class _RunningActions extends StatelessWidget {
                 disabledForegroundColor: Colors.white,
                 minimumSize: const Size.fromHeight(52),
               ),
-              icon: busy && !pausing
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : Icon(stopIcon, size: 16),
+              icon: MotionSwap(
+                switchKey: busy && !pausing ? 'busy' : stopIcon,
+                alignment: Alignment.center,
+                child: busy && !pausing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Icon(stopIcon, size: 16),
+              ),
               label: Text(stopLabel),
             ),
           ),
@@ -680,22 +923,35 @@ class _PauseVote extends StatelessWidget {
 class _WaitingActions extends StatelessWidget {
   const _WaitingActions({
     required this.busy,
+    required this.canStart,
     required this.onStart,
     required this.onCancel,
   });
 
   final bool busy;
+  final bool canStart;
   final VoidCallback onStart;
   final VoidCallback onCancel;
 
   @override
   Widget build(BuildContext context) {
-    final onPrimary = Theme.of(context).colorScheme.onPrimary;
+    final theme = Theme.of(context);
+    final onPrimary = theme.colorScheme.onPrimary;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (!canStart) ...[
+          Text(
+            tr('invite_waiting'),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              height: 1.35,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         FilledButton.icon(
-          onPressed: busy ? null : onStart,
+          onPressed: busy || !canStart ? null : onStart,
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
           icon: busy
               ? SizedBox(
@@ -832,12 +1088,15 @@ class _SessionHeadingState extends State<_SessionHeading> {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    Icon(
-                      _open
-                          ? CupertinoIcons.chevron_up
-                          : CupertinoIcons.chevron_down,
-                      size: 16,
-                      color: scheme.onSurface,
+                    AnimatedRotation(
+                      turns: _open ? 0.5 : 0,
+                      duration: kMotion,
+                      curve: kMotionCurve,
+                      child: Icon(
+                        CupertinoIcons.chevron_down,
+                        size: 16,
+                        color: scheme.onSurface,
+                      ),
                     ),
                   ],
                 ),
@@ -852,10 +1111,12 @@ class _SessionHeadingState extends State<_SessionHeading> {
           child: _open
               ? Padding(
                   padding: const EdgeInsets.only(top: 8),
-                  child: _LabelMenu(
-                    labels: labels,
-                    selected: _pending ?? selected,
-                    onChoose: _choose,
+                  child: MotionIn(
+                    child: _LabelMenu(
+                      labels: labels,
+                      selected: _pending ?? selected,
+                      onChoose: _choose,
+                    ),
                   ),
                 )
               : const SizedBox(width: double.infinity),
@@ -888,14 +1149,18 @@ class _StatusLine extends StatelessWidget {
           animate: live,
         ),
         const SizedBox(width: 6),
-        Text(
-          label,
-          style: theme.textTheme.titleSmall?.copyWith(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            letterSpacing: -0.2,
-            height: 1.1,
-            color: theme.colorScheme.onSurface,
+        MotionSwap(
+          switchKey: label,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            label,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
+              height: 1.1,
+              color: theme.colorScheme.onSurface,
+            ),
           ),
         ),
       ],
@@ -933,10 +1198,12 @@ class _LabelMenu extends StatelessWidget {
               for (var i = 0; i < labels.length; i++)
                 InkWell(
                   onTap: () => onChoose(i),
-                  child: ColoredBox(
-                    color: i == selected
-                        ? theme.colorScheme.primary.withValues(alpha: 0.16)
-                        : Colors.transparent,
+                  child: AnimatedContainer(
+                    duration: kMotion,
+                    curve: kMotionCurve,
+                    color: theme.colorScheme.primary.withValues(
+                      alpha: i == selected ? 0.16 : 0,
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(
                         _labelPadLeft,
@@ -1140,19 +1407,54 @@ class _BlockingCard extends StatelessWidget {
   }
 }
 
-List<String> _namesFor(
+class _MemberLine {
+  const _MemberLine({required this.alias, this.username});
+
+  final String alias;
+  final String? username;
+}
+
+List<_MemberLine> _membersFor(
   FocusSession session,
-  AsyncValue<List<SessionParticipant>> members,
-) {
-  if (session.sharedSessionId == null) return _sessionMembers;
+  AsyncValue<List<SessionParticipant>> members, {
+  required String userId,
+  required UserProfile? profile,
+}) {
+  if (session.sharedSessionId == null) return [_localMember(profile)];
   final people = members.asData?.value;
-  if (people == null || people.isEmpty) return _sessionMembers;
-  final names = [
+  if (people == null || people.isEmpty) return [_localMember(profile)];
+  final lines = <_MemberLine>[
     for (final person in people)
-      if (person.name.isNotEmpty) person.name,
+      if (person.name.isNotEmpty)
+        _MemberLine(
+          alias: person.name,
+          username: _usernameFor(person, userId: userId, profile: profile),
+        ),
   ];
-  if (names.isEmpty) return _sessionMembers;
-  return names;
+  if (lines.isEmpty) return [_localMember(profile)];
+  return lines;
+}
+
+_MemberLine _localMember(UserProfile? profile) {
+  final alias = profile?.alias?.trim();
+  final username = profile?.username?.trim();
+  if (alias != null && alias.isNotEmpty) {
+    return _MemberLine(alias: alias, username: username);
+  }
+  return _MemberLine(alias: tr('session_you'), username: username);
+}
+
+String? _usernameFor(
+  SessionParticipant person, {
+  required String userId,
+  required UserProfile? profile,
+}) {
+  final stored = person.username?.trim();
+  if (stored != null && stored.isNotEmpty) return stored;
+  if (person.uid != userId) return null;
+  final own = profile?.username?.trim();
+  if (own == null || own.isEmpty) return null;
+  return own;
 }
 
 class _ShareButton extends ConsumerStatefulWidget {
@@ -1199,12 +1501,16 @@ class _ShareButtonState extends ConsumerState<_ShareButton> {
       child: TextButton.icon(
         onPressed: _sharing ? null : _share,
         style: TextButton.styleFrom(
-          visualDensity: VisualDensity.compact,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          minimumSize: const Size(0, 36),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          minimumSize: const Size(0, 48),
           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          textStyle: const TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+          ),
         ),
-        icon: const Icon(CupertinoIcons.square_arrow_up, size: 18),
+        icon: const Icon(CupertinoIcons.square_arrow_up, size: 22),
         label: Text(tr('session_share')),
       ),
     );
@@ -1212,18 +1518,19 @@ class _ShareButtonState extends ConsumerState<_ShareButton> {
 }
 
 class _MemberList extends StatelessWidget {
-  const _MemberList({required this.names, required this.session});
+  const _MemberList({required this.members, required this.session});
 
-  final List<String> names;
+  final List<_MemberLine> members;
   final FocusSession session;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final nameStyle = theme.textTheme.labelMedium?.copyWith(
+    final nameStyle = theme.textTheme.titleMedium?.copyWith(
+      fontSize: 17,
       fontWeight: FontWeight.w600,
-      letterSpacing: 0.1,
-      height: 1.3,
+      letterSpacing: -0.2,
+      height: 1.2,
       color: theme.colorScheme.onSurface,
     );
 
@@ -1234,7 +1541,7 @@ class _MemberList extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                tr('session_members', args: ['${names.length}']),
+                tr('session_members', args: ['${members.length}']),
                 style: theme.textTheme.bodyMedium?.copyWith(
                   fontSize: 15,
                   fontWeight: FontWeight.w500,
@@ -1246,10 +1553,10 @@ class _MemberList extends StatelessWidget {
             _ShareButton(session: session),
           ],
         ),
-        const SizedBox(height: 10),
-        for (var i = 0; i < names.length; i++) ...[
-          if (i > 0) const SizedBox(height: 8),
-          _MemberRow(name: names[i], nameStyle: nameStyle),
+        const SizedBox(height: 14),
+        for (var i = 0; i < members.length; i++) ...[
+          if (i > 0) const SizedBox(height: 12),
+          _MemberRow(member: members[i], nameStyle: nameStyle),
         ],
       ],
     );
@@ -1257,20 +1564,21 @@ class _MemberList extends StatelessWidget {
 }
 
 class _MemberRow extends StatelessWidget {
-  const _MemberRow({required this.name, required this.nameStyle});
+  const _MemberRow({required this.member, required this.nameStyle});
 
-  final String name;
+  final _MemberLine member;
   final TextStyle? nameStyle;
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final handle = member.username?.trim();
 
     return Row(
       children: [
         Container(
-          width: 32,
-          height: 32,
+          width: 44,
+          height: 44,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             color: scheme.primary.withValues(alpha: 0.22),
@@ -1278,17 +1586,29 @@ class _MemberRow extends StatelessWidget {
           ),
           child: Icon(
             CupertinoIcons.person_fill,
-            size: 16,
+            size: 22,
             color: scheme.primary,
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 12),
         Expanded(
-          child: Text(
-            name,
+          child: Text.rich(
+            TextSpan(
+              text: member.alias,
+              style: nameStyle,
+              children: [
+                if (handle != null && handle.isNotEmpty)
+                  TextSpan(
+                    text: ' ($handle)',
+                    style: nameStyle?.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: nameStyle,
           ),
         ),
       ],
@@ -1427,6 +1747,30 @@ class _Track extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+/// Soft veil over the app while the session sheet is up.
+class _SessionVeil extends StatelessWidget {
+  const _SessionVeil();
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ExcludeSemantics(
+      child: AbsorbPointer(
+        child: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+            child: ColoredBox(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.45)
+                  : Colors.white.withValues(alpha: 0.45),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

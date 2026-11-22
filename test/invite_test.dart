@@ -121,11 +121,27 @@ void main() {
     expect(sharedDurationMinutes(session), 25);
     expect(sharedTitleOf(null, fallback: 'Focus'), 'Focus');
     expect(sharedTitleOf('Deep work', fallback: 'Focus'), 'Deep work');
+    expect(memberLabel('Ada', 'ada'), 'Ada (ada)');
+    expect(memberLabel('Ada', '  '), 'Ada');
+    expect(memberLabel('Ada', null), 'Ada');
     expect(
       sharedStatusFor(SessionOutcome.created),
       SharedSessionStatus.waiting,
     );
     expect(sharedStatusFor(SessionOutcome.paused), SharedSessionStatus.active);
+    final waiting = FocusSession(
+      id: 'waiting',
+      blockListId: 'deep',
+      blockListName: 'Deep work',
+      startedAt: DateTime(2026, 1, 1, 8),
+      endsAt: DateTime(2026, 1, 1, 8, 25),
+      outcome: SessionOutcome.created,
+    );
+    expect(sharedRoomStartedAt(waiting), isNull);
+    expect(sharedRoomEndsAt(waiting), isNull);
+    expect(sharedDurationMinutes(waiting), 25);
+    expect(sharedRoomStartedAt(session), session.startedAt);
+    expect(sharedRoomEndsAt(session), session.endsAt);
   });
 
   test('a pause starts only after every member accepts', () {

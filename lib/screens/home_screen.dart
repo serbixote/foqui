@@ -11,6 +11,7 @@ import '../state/auth.dart';
 import '../state/focus_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/floating_tab_bar.dart';
+import '../widgets/motion.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/session_bar_button.dart';
 import '../widgets/surface_card.dart';
@@ -59,7 +60,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     try {
       final open = ref.read(focusControllerProvider).foregroundSession;
       if (open != null && open.outcome != SessionOutcome.created) {
-        await ref.read(focusControllerProvider.notifier).endSession();
+        await ref
+            .read(focusControllerProvider.notifier)
+            .endSession(force: true);
       }
     } catch (error, stack) {
       debugPrint('Could not end the session before sign-out: $error\n$stack');
@@ -115,18 +118,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             icon: const Icon(CupertinoIcons.square_arrow_right, size: 22),
           ),
         ),
-        authorization.when(
-          data: (status) => status.isAuthorized
-              ? const SizedBox.shrink()
-              : Padding(
-                  padding: const EdgeInsets.only(top: 20),
-                  child: _PermissionBanner(status: status),
-                ),
-          loading: () => const SizedBox.shrink(),
-          error: (_, _) => const Padding(
-            padding: EdgeInsets.only(top: 20),
-            child: _PermissionBanner(
-              status: FamilyControlsAuthorization.unknown,
+        AnimatedSize(
+          duration: kMotion,
+          curve: kMotionCurve,
+          alignment: Alignment.topCenter,
+          child: authorization.when(
+            data: (status) => status.isAuthorized
+                ? const SizedBox.shrink()
+                : Padding(
+                    padding: const EdgeInsets.only(top: 20),
+                    child: _PermissionBanner(status: status),
+                  ),
+            loading: () => const SizedBox.shrink(),
+            error: (_, _) => const Padding(
+              padding: EdgeInsets.only(top: 20),
+              child: _PermissionBanner(
+                status: FamilyControlsAuthorization.unknown,
+              ),
             ),
           ),
         ),
@@ -138,51 +146,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       child: Column(
         children: [
           Expanded(
-            child: past.isEmpty
-                ? CustomScrollView(
-                    slivers: [
-                      SliverPadding(
-                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                        sliver: SliverToBoxAdapter(child: chrome),
-                      ),
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Padding(
-                          padding: kEmptyContentPadding,
-                          child: Align(
-                            alignment: kEmptyContentAlignment,
-                            child: _HomeEmpty(
-                              busy: _starting,
-                              onStart: _startSession,
+            child: MotionSwap(
+              expand: true,
+              switchKey: past.isEmpty,
+              child: past.isEmpty
+                  ? CustomScrollView(
+                      slivers: [
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                          sliver: SliverToBoxAdapter(child: chrome),
+                        ),
+                        SliverFillRemaining(
+                          hasScrollBody: false,
+                          child: Padding(
+                            padding: kEmptyContentPadding,
+                            child: Align(
+                              alignment: kEmptyContentAlignment,
+                              child: _HomeEmpty(
+                                busy: _starting,
+                                onStart: _startSession,
+                              ),
                             ),
                           ),
                         ),
+                      ],
+                    )
+                  : ListView(
+                      padding: EdgeInsets.fromLTRB(
+                        20,
+                        16,
+                        20,
+                        hasMore ? 12 : kFloatingContentInset,
                       ),
-                    ],
-                  )
-                : ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      20,
-                      16,
-                      20,
-                      hasMore ? 12 : kFloatingContentInset,
+                      children: [
+                        chrome,
+                        const SizedBox(height: 16),
+                        _SectionHeader(title: tr('home_recent')),
+                        const SizedBox(height: 10),
+                        SurfaceGroup(
+                          children: [
+                            for (final session in shown)
+                              _HistoryTile(
+                                session: session,
+                                labels: state.labels,
+                              ),
+                          ],
+                        ),
+                      ],
                     ),
-                    children: [
-                      chrome,
-                      const SizedBox(height: 16),
-                      _SectionHeader(title: tr('home_recent')),
-                      const SizedBox(height: 10),
-                      SurfaceGroup(
-                        children: [
-                          for (final session in shown)
-                            _HistoryTile(
-                              session: session,
-                              labels: state.labels,
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
+            ),
           ),
           if (hasMore)
             Padding(

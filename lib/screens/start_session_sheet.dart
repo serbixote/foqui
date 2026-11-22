@@ -9,6 +9,7 @@ import '../models/focus_label.dart';
 import '../models/focus_session.dart';
 import '../models/session_duration.dart';
 import '../state/focus_controller.dart';
+import '../widgets/motion.dart';
 import '../widgets/sheet_header.dart';
 import '../widgets/surface_card.dart';
 import 'block_list_sheet.dart';
@@ -768,11 +769,15 @@ class _LabelChoice extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
         child: Row(
           children: [
-            Icon(
-              selected
-                  ? CupertinoIcons.checkmark_circle_fill
-                  : CupertinoIcons.circle,
-              color: selected ? scheme.primary : scheme.onSurfaceVariant,
+            MotionSwap(
+              switchKey: selected,
+              alignment: Alignment.center,
+              child: Icon(
+                selected
+                    ? CupertinoIcons.checkmark_circle_fill
+                    : CupertinoIcons.circle,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 14),
             Text(label.emoji, style: const TextStyle(fontSize: 20, height: 1)),
@@ -815,11 +820,15 @@ class _ListChoice extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
         child: Row(
           children: [
-            Icon(
-              selected
-                  ? CupertinoIcons.checkmark_circle_fill
-                  : CupertinoIcons.circle,
-              color: selected ? scheme.primary : scheme.onSurfaceVariant,
+            MotionSwap(
+              switchKey: selected,
+              alignment: Alignment.center,
+              child: Icon(
+                selected
+                    ? CupertinoIcons.checkmark_circle_fill
+                    : CupertinoIcons.circle,
+                color: selected ? scheme.primary : scheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -875,24 +884,33 @@ class _DurationChoice extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final fill = selected
+        ? scheme.primary.withValues(alpha: 0.12)
+        : scheme.surfaceContainerHighest;
     return Material(
-      color: selected
-          ? scheme.primary.withValues(alpha: 0.12)
-          : scheme.surfaceContainerHighest,
+      color: Colors.transparent,
       borderRadius: BorderRadius.circular(8),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         splashFactory: NoSplash.splashFactory,
         overlayColor: const WidgetStatePropertyAll(Colors.transparent),
-        child: Padding(
+        child: AnimatedContainer(
+          duration: kMotion,
+          curve: kMotionCurve,
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Text(
-            label,
-            style: theme.textTheme.labelLarge?.copyWith(
+          decoration: BoxDecoration(
+            color: fill,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: AnimatedDefaultTextStyle(
+            duration: kMotion,
+            curve: kMotionCurve,
+            style: (theme.textTheme.labelLarge ?? const TextStyle()).copyWith(
               fontWeight: FontWeight.w600,
               color: selected ? scheme.primary : scheme.onSurface,
             ),
+            child: Text(label),
           ),
         ),
       ),

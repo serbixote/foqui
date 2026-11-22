@@ -10,6 +10,7 @@ import 'package:foqui/models/focus_label.dart';
 import 'package:foqui/models/focus_session.dart';
 import 'package:foqui/models/focus_stats.dart';
 import 'package:foqui/models/session_duration.dart';
+import 'package:foqui/models/shared_session.dart';
 import 'package:foqui/services/focus_repository.dart';
 import 'package:foqui/services/focus_shield_bridge.dart';
 import 'package:foqui/state/focus_controller.dart';
@@ -337,7 +338,32 @@ void main() {
     );
   });
 
-  test('pause is allowed only after five minutes', () {
+  test('pause is allowed only after twenty minutes', () {
+    final start = DateTime(2026, 11, 18, 9);
+    final running = FocusSession(
+      id: 'live',
+      blockListId: 'list',
+      blockListName: 'Work',
+      startedAt: start,
+      endsAt: start.add(const Duration(minutes: 45)),
+      outcome: SessionOutcome.active,
+    );
+
+    expect(
+      canPauseSession(running, start.add(const Duration(minutes: 4))),
+      isFalse,
+    );
+    expect(canPauseSession(running, start.add(minimumPauseLength)), isFalse);
+    expect(
+      canPauseSession(
+        running,
+        start.add(minimumPauseLength + const Duration(milliseconds: 1)),
+      ),
+      isTrue,
+    );
+  });
+
+  test('stopping is allowed once the session has run five minutes', () {
     final start = DateTime(2026, 11, 18, 9);
     final running = FocusSession(
       id: 'live',
@@ -349,17 +375,10 @@ void main() {
     );
 
     expect(
-      canPauseSession(running, start.add(const Duration(minutes: 4))),
+      canStopSession(running, start.add(const Duration(minutes: 4))),
       isFalse,
     );
-    expect(canPauseSession(running, start.add(minimumRecordedLength)), isFalse);
-    expect(
-      canPauseSession(
-        running,
-        start.add(minimumRecordedLength + const Duration(milliseconds: 1)),
-      ),
-      isTrue,
-    );
+    expect(canStopSession(running, start.add(minimumRecordedLength)), isTrue);
   });
 
   test('focus stats are empty without sessions', () {
@@ -723,6 +742,102 @@ void main() {
     expect(started.activeSession?.labelId, 'study-session');
     expect(started.activeSession?.blockListId, 'social');
     expect(repository.sessions.single.outcome, SessionOutcome.active);
+  });
+
+  test('a joined room that has not started waits on the same session', () async {
+    final repository = MemoryFocusRepository(
+      lists: [
+        BlockList(
+          id: 'social',
+          name: 'Social',
+          applicationCount: 1,
+          categoryCount: 0,
+          webDomainCount: 0,
+          updatedAt: DateTime.utc(2026, 1, 1),
+        ),
+      ],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        focusRepositoryProvider.overrideWithValue(repository),
+        focusShieldBridgeProvider.overrideWithValue(_ApprovingShield()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final controller = container.read(focusControllerProvider.notifier);
+    const code = '0123456789abcdef0123456789abcdef';
+    final waiting = SharedSession(
+      id: 'room',
+      hostId: 'host',
+      hostName: 'Ada',
+      title: 'Study session',
+      labelEmoji: '🧠',
+      durationMinutes: 25,
+      status: SharedSessionStatus.waiting,
+      startedAt: null,
+      endsAt: null,
+      createdAt: DateTime(2026, 1, 1, 10),
+      expiresAt: DateTime.now().add(const Duration(hours: 2)),
+    );
+
+    expect(
+      await controller.holdJoinedSession(
+        listId: 'social',
+        shared: waiting,
+        inviteCode: code,
+      ),
+      isTrue,
+    );
+    final held = container.read(focusControllerProvider);
+    expect(held.activeSession, isNull);
+    expect(held.foregroundSession?.outcome, SessionOutcome.created);
+    expect(held.foregroundSession?.sharedSessionId, 'room');
+    expect(held.foregroundSession?.sharedHost, isFalse);
+    expect(held.foregroundSession?.labelId, 'study-session');
+    expect(
+      held.sessions.single.endsAt!.difference(held.sessions.single.startedAt),
+      const Duration(minutes: 25),
+    );
+    expect(
+      await controller.startJoinedSession(
+        listId: 'social',
+        shared: waiting,
+        inviteCode: code,
+      ),
+      isFalse,
+    );
+    expect(
+      container.read(focusControllerProvider).sessions.single.outcome,
+      SessionOutcome.created,
+    );
+
+    final endsAt = DateTime.now().add(const Duration(minutes: 20));
+    final running = SharedSession(
+      id: 'room',
+      hostId: 'host',
+      hostName: 'Ada',
+      title: 'Study session',
+      labelEmoji: '🧠',
+      durationMinutes: 25,
+      status: SharedSessionStatus.active,
+      startedAt: DateTime.now(),
+      endsAt: endsAt,
+      createdAt: waiting.createdAt,
+      expiresAt: endsAt,
+    );
+    expect(
+      await controller.startJoinedSession(
+        listId: 'social',
+        shared: running,
+        inviteCode: code,
+      ),
+      isTrue,
+    );
+    final started = container.read(focusControllerProvider);
+    expect(started.sessions, hasLength(1));
+    expect(started.sessions.single.id, held.sessions.single.id);
+    expect(started.activeSession?.endsAt, endsAt);
+    expect(started.activeSession?.sharedHost, isFalse);
   });
 
   test('a session keeps the label chosen up front', () async {
@@ -1404,7 +1519,7 @@ void main() {
     );
   });
 
-  test('ending a session under a minute leaves no record', () async {
+  test('ending a session under a minute leaves it running', () async {
     final now = DateTime.now();
     final repository = MemoryFocusRepository(
       sessions: [
@@ -1425,12 +1540,11 @@ void main() {
 
     await container.read(focusControllerProvider.notifier).endSession();
 
-    expect(container.read(focusControllerProvider).sessions, isEmpty);
-    expect(repository.sessions, isEmpty);
-    expect(container.read(focusControllerProvider).activeSession, isNull);
+    expect(container.read(focusControllerProvider).activeSession, isNotNull);
+    expect(repository.sessions.single.outcome, SessionOutcome.active);
   });
 
-  test('ending a session of four minutes leaves no record', () async {
+  test('ending a session of four minutes leaves it running', () async {
     final now = DateTime.now();
     final repository = MemoryFocusRepository(
       sessions: [
@@ -1451,8 +1565,8 @@ void main() {
 
     await container.read(focusControllerProvider.notifier).endSession();
 
-    expect(container.read(focusControllerProvider).sessions, isEmpty);
-    expect(repository.sessions, isEmpty);
+    expect(container.read(focusControllerProvider).activeSession, isNotNull);
+    expect(repository.sessions.single.outcome, SessionOutcome.active);
   });
 
   test('ending a session of five minutes keeps the record', () async {
@@ -1516,7 +1630,7 @@ void main() {
     expect(repository.sessions.single.id, 'kept');
   });
 
-  test('a session under five minutes cannot be paused', () async {
+  test('a session under twenty minutes cannot be paused', () async {
     final now = DateTime.now();
     final repository = MemoryFocusRepository(
       lists: [
@@ -1534,8 +1648,8 @@ void main() {
           id: 'live',
           blockListId: 'social',
           blockListName: 'Social',
-          startedAt: now.subtract(const Duration(minutes: 4)),
-          endsAt: now.add(const Duration(minutes: 21)),
+          startedAt: now.subtract(const Duration(minutes: 19)),
+          endsAt: now.add(const Duration(minutes: 26)),
           outcome: SessionOutcome.active,
         ),
       ],
@@ -1601,7 +1715,7 @@ void main() {
   });
 
   test('pausing holds the clock and resuming continues it', () async {
-    final startedAt = DateTime.now().subtract(const Duration(minutes: 6));
+    final startedAt = DateTime.now().subtract(const Duration(minutes: 21));
     final repository = MemoryFocusRepository(
       lists: [
         BlockList(

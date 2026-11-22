@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -27,7 +25,6 @@ class _AppShellState extends ConsumerState<AppShell> {
     final session = ref.watch(focusControllerProvider).foregroundSession;
     final locked = session != null;
     if (locked) _index = 0;
-    final topInset = MediaQuery.paddingOf(context).top;
 
     return PopScope(
       canPop: !locked,
@@ -91,41 +88,8 @@ class _AppShellState extends ConsumerState<AppShell> {
               bottom: kFloatingBarBottomGap,
               child: SessionBarButton(),
             ),
-            if (locked) ...[
-              const Positioned.fill(child: _SessionVeil()),
-              Positioned(
-                left: 0,
-                right: 0,
-                top: topInset,
-                bottom: 0,
-                child: const SessionLiveActivity(),
-              ),
-            ],
+            const Positioned.fill(child: SessionLiveActivity()),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Soft veil over the app while the session sheet is up.
-class _SessionVeil extends StatelessWidget {
-  const _SessionVeil();
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return ExcludeSemantics(
-      child: AbsorbPointer(
-        child: ClipRect(
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-            child: ColoredBox(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.45)
-                  : Colors.white.withValues(alpha: 0.45),
-            ),
-          ),
         ),
       ),
     );

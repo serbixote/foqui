@@ -11,6 +11,7 @@ import '../services/focus_shield_bridge.dart';
 import '../state/focus_controller.dart';
 import 'floating_chrome.dart';
 import 'floating_tab_bar.dart';
+import 'motion.dart';
 
 /// Session action that floats beside the tab bar on every screen.
 ///
@@ -89,12 +90,7 @@ class _SessionBarButtonState extends ConsumerState<SessionBarButton>
     final state = ref.watch(focusControllerProvider);
     final nudge = _wantsPulse(state);
     if (nudge != _pulseOn) _queuePulseSync();
-    if (state.foregroundSession != null) {
-      return const SizedBox(
-        width: kFloatingTabBarHeight,
-        height: kFloatingTabBarHeight,
-      );
-    }
+    final hidden = state.foregroundSession != null;
 
     final button = FloatingChrome(
       isDark: isDark,
@@ -108,38 +104,53 @@ class _SessionBarButtonState extends ConsumerState<SessionBarButton>
           width: kFloatingTabBarHeight,
           height: kFloatingTabBarHeight,
           child: Center(
-            child: _busy
-                ? SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.4,
-                      color: scheme.onPrimary,
+            child: MotionSwap(
+              switchKey: _busy,
+              alignment: Alignment.center,
+              child: _busy
+                  ? SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.4,
+                        color: scheme.onPrimary,
+                      ),
+                    )
+                  : Transform.translate(
+                      // The play triangle's weight sits left of its bounds.
+                      offset: const Offset(2, 0),
+                      child: Icon(
+                        CupertinoIcons.play_fill,
+                        size: 24,
+                        color: scheme.onPrimary,
+                      ),
                     ),
-                  )
-                : Transform.translate(
-                    // The play triangle's weight sits left of its bounds.
-                    offset: const Offset(2, 0),
-                    child: Icon(
-                      CupertinoIcons.play_fill,
-                      size: 24,
-                      color: scheme.onPrimary,
-                    ),
-                  ),
+            ),
           ),
         ),
       ),
     );
 
-    return Tooltip(
-      message: tr('session_start_focus'),
-      child: _pulseOn
-          ? _StartButtonPulse(
-              animation: _pulse,
-              color: scheme.primary,
-              child: button,
-            )
-          : button,
+    return IgnorePointer(
+      ignoring: hidden,
+      child: ExcludeSemantics(
+        excluding: hidden,
+        child: AnimatedSlide(
+          offset: hidden ? const Offset(0, 1.2) : Offset.zero,
+          duration: kMotionSheet,
+          curve: kMotionCurve,
+          child: Tooltip(
+            message: tr('session_start_focus'),
+            child: _pulseOn
+                ? _StartButtonPulse(
+                    animation: _pulse,
+                    color: scheme.primary,
+                    child: button,
+                  )
+                : button,
+          ),
+        ),
+      ),
     );
   }
 }

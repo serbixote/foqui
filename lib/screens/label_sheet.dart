@@ -9,6 +9,7 @@ import '../models/focus_label.dart';
 import '../l10n/tr.dart';
 import '../state/focus_controller.dart';
 import '../theme/app_theme.dart';
+import '../widgets/motion.dart';
 import '../widgets/sheet_header.dart';
 
 List<CategoryEmoji> _emojiSet(Locale locale) {
@@ -477,13 +478,20 @@ class _LabelIconButton extends StatelessWidget {
             key: const Key('label-emoji'),
             onTap: onTap,
             child: Center(
-              child: icon == null
-                  ? Icon(
-                      CupertinoIcons.smiley,
-                      size: 26,
-                      color: scheme.onSurfaceVariant,
-                    )
-                  : Text(icon, style: const TextStyle(fontSize: 28, height: 1)),
+              child: MotionSwap(
+                switchKey: icon ?? '',
+                alignment: Alignment.center,
+                child: icon == null
+                    ? Icon(
+                        CupertinoIcons.smiley,
+                        size: 26,
+                        color: scheme.onSurfaceVariant,
+                      )
+                    : Text(
+                        icon,
+                        style: const TextStyle(fontSize: 28, height: 1),
+                      ),
+              ),
             ),
           ),
         ),

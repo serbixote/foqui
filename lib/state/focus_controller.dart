@@ -646,6 +646,8 @@ class FocusController extends Notifier<FocusState> {
     }
     if (existing == null || existing.outcome != SessionOutcome.created) return;
     if (state.activeSession != null || state.pausedSession != null) return;
+    // A joined room starts from the host's clock, once the room is active.
+    if (existing.sharedSessionId != null && !existing.sharedHost) return;
 
     final list = _listById(existing.blockListId);
     if (list == null || list.isEmpty) {
@@ -762,22 +764,35 @@ class FocusController extends Notifier<FocusState> {
     final existingCode = session.inviteCode;
     if (existingCode != null) return inviteUrl(existingCode);
 
-    final alias = ref.read(userProfileProvider).asData?.value.alias?.trim();
+    final profile = ref.read(userProfileProvider).asData?.value;
+    final alias = profile?.alias?.trim();
+    final username = profile?.username?.trim();
     final repository = ref.read(inviteRepositoryProvider);
-    if (alias == null || alias.isEmpty || repository == null) return null;
+    if (alias == null ||
+        alias.isEmpty ||
+        username == null ||
+        username.isEmpty ||
+        repository == null) {
+      return null;
+    }
 
     final status = sharedStatusFor(session.outcome);
     if (status == SharedSessionStatus.ended) return null;
     final now = DateTime.now();
-    final endsAt = session.endsAt;
+    // Not started yet: the local start and end are only the planned length.
+    // The room has no clock until Start. Sending that placeholder end fails
+    // once it is in the past, and the share button appears to do nothing.
+    final startedAt = sharedRoomStartedAt(session);
+    final endsAt = sharedRoomEndsAt(session);
     final label = labelForId(session.labelId, state.labels);
     final created = await repository.create(
       hostName: alias,
+      username: username,
       title: sharedTitleOf(label?.name, fallback: tr('session_focus_fallback')),
       labelEmoji: sharedEmojiOf(label?.emoji),
       durationMinutes: sharedDurationMinutes(session),
       status: status,
-      startedAt: session.startedAt,
+      startedAt: startedAt,
       endsAt: endsAt,
       expiresAt: sharedExpiry(now: now, status: status, endsAt: endsAt),
     );
@@ -798,9 +813,54 @@ class FocusController extends Notifier<FocusState> {
     return created.url;
   }
 
+  /// Puts a joined room on screen before the host has started it.
+  ///
+  /// The block list is this phone's. The clock stays at zero, the same way a
+  /// session this person created waits to be started.
+  Future<bool> holdJoinedSession({
+    required String listId,
+    required SharedSession shared,
+    required String inviteCode,
+  }) async {
+    if (state.foregroundSession != null) return false;
+    if (shared.isOver || shared.canStart) return false;
+    if (shared.status != SharedSessionStatus.waiting) return false;
+    final list = _listById(listId);
+    if (list == null || list.isEmpty) {
+      throw const FocusShieldException('EMPTY_SELECTION', '');
+    }
+
+    final startedAt = DateTime.now();
+    final minutes = shared.durationMinutes;
+    final endsAt = minutes == null
+        ? null
+        : startedAt.add(Duration(minutes: clampSessionMinutes(minutes)));
+    final label = _labelMatching(shared.title);
+    final sessions = trimSessions([
+      ...state.sessions,
+      _labeled(
+        FocusSession(
+          id: _uuid.v4(),
+          blockListId: list.id,
+          blockListName: list.name,
+          startedAt: startedAt,
+          endsAt: endsAt,
+          outcome: SessionOutcome.created,
+          labelId: label?.id,
+          sharedSessionId: shared.id,
+          inviteCode: inviteCode,
+        ),
+      ),
+    ]);
+    state = state.copyWith(sessions: sessions);
+    await ref.read(focusRepositoryProvider).writeSessions(sessions);
+    return true;
+  }
+
   /// Starts this phone's shield for a room the person just joined.
   ///
-  /// The block list is theirs. The end time is the shared room's.
+  /// The block list is theirs. The end time is the shared room's. A room
+  /// they are already waiting in keeps that same session.
   Future<bool> startJoinedSession({
     required String listId,
     required SharedSession shared,
@@ -815,26 +875,47 @@ class FocusController extends Notifier<FocusState> {
       throw const FocusShieldException('EMPTY_SELECTION', '');
     }
 
+    FocusSession? held;
+    for (final session in state.sessions) {
+      if (session.sharedSessionId != shared.id) continue;
+      if (session.outcome != SessionOutcome.created) continue;
+      held = session;
+      break;
+    }
+
     final startedAt = DateTime.now();
     final endsAt = shared.endsAt;
     await _startShield(listId: list.id, endsAt: endsAt);
 
     final label = _labelMatching(shared.title);
-    final sessions = trimSessions([
-      ...state.sessions,
-      FocusSession(
-        id: _uuid.v4(),
-        blockListId: list.id,
-        blockListName: list.name,
-        startedAt: startedAt,
-        endsAt: endsAt,
-        outcome: SessionOutcome.active,
-        labelId: label?.id,
-        sharedSessionId: shared.id,
-        inviteCode: inviteCode,
-        sharedHost: shared.hostId == ref.read(authProvider).userId,
-      ),
-    ]);
+    final sessions = held == null
+        ? trimSessions([
+            ...state.sessions,
+            FocusSession(
+              id: _uuid.v4(),
+              blockListId: list.id,
+              blockListName: list.name,
+              startedAt: startedAt,
+              endsAt: endsAt,
+              outcome: SessionOutcome.active,
+              labelId: label?.id,
+              sharedSessionId: shared.id,
+              inviteCode: inviteCode,
+              sharedHost: shared.hostId == ref.read(authProvider).userId,
+            ),
+          ])
+        : [
+            for (final session in state.sessions)
+              if (session.id == held.id)
+                session.copyWith(
+                  blockListName: list.name,
+                  startedAt: startedAt,
+                  endsAt: endsAt,
+                  outcome: SessionOutcome.active,
+                )
+              else
+                session,
+          ];
     state = state.copyWith(sessions: sessions);
     await ref.read(focusRepositoryProvider).writeSessions(sessions);
     return true;
@@ -862,7 +943,7 @@ class FocusController extends Notifier<FocusState> {
       await completeIfDue();
       return;
     }
-    await endSession();
+    await endSession(force: true);
   }
 
   /// Drops a session whose timer was never started.
@@ -881,11 +962,14 @@ class FocusController extends Notifier<FocusState> {
     ];
     state = state.copyWith(sessions: sessions);
     await ref.read(focusRepositoryProvider).writeSessions(sessions);
+    if (!existing.sharedHost) {
+      await _removeParticipant(existing.sharedSessionId);
+    }
   }
 
   /// Holds the clock and lifts the shield. The session stays on screen.
   ///
-  /// Ignored until the session has run for longer than five minutes.
+  /// Ignored until the session has run for longer than twenty minutes.
   /// A room with other people uses [requestSharedPause] instead.
   Future<void> pauseSession() async {
     final active = state.activeSession;
@@ -988,20 +1072,26 @@ class FocusController extends Notifier<FocusState> {
   }
 
   /// Stops this phone and leaves the room. Everyone else keeps focusing.
-  Future<void> leaveSession({bool cancelPause = false}) async {
+  ///
+  /// Ignored until the session has run for five minutes, unless [force] is set.
+  Future<void> leaveSession({
+    bool cancelPause = false,
+    bool force = false,
+  }) async {
     final session = state.foregroundSession;
     if (session == null ||
         session.outcome == SessionOutcome.created ||
         _settling) {
       return;
     }
+    final stoppedAt = session.outcome == SessionOutcome.paused
+        ? (session.pausedAt ?? DateTime.now())
+        : DateTime.now();
+    if (!force && !canStopSession(session, stoppedAt)) return;
     final sharedId = session.sharedSessionId;
     _settling = true;
     try {
       if (cancelPause) await _clearSharedPause(sharedId);
-      final stoppedAt = session.outcome == SessionOutcome.paused
-          ? (session.pausedAt ?? DateTime.now())
-          : DateTime.now();
       await _finish(
         session,
         SessionOutcome.endedEarly,
@@ -1014,18 +1104,22 @@ class FocusController extends Notifier<FocusState> {
     }
   }
 
-  Future<void> endSession() async {
+  /// Stops the session on this phone.
+  ///
+  /// Ignored until the session has run for five minutes, unless [force] is set.
+  Future<void> endSession({bool force = false}) async {
     final session = state.foregroundSession;
     if (session == null ||
         session.outcome == SessionOutcome.created ||
         _settling) {
       return;
     }
+    final stoppedAt = session.outcome == SessionOutcome.paused
+        ? (session.pausedAt ?? DateTime.now())
+        : DateTime.now();
+    if (!force && !canStopSession(session, stoppedAt)) return;
     _settling = true;
     try {
-      final stoppedAt = session.outcome == SessionOutcome.paused
-          ? (session.pausedAt ?? DateTime.now())
-          : DateTime.now();
       await _finish(session, SessionOutcome.endedEarly, stoppedAt);
     } finally {
       _settling = false;

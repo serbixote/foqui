@@ -11,6 +11,7 @@ import '../theme/app_theme.dart';
 import '../widgets/block_list_app_line.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/floating_tab_bar.dart';
+import '../widgets/motion.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/sheet_header.dart';
 import '../widgets/surface_card.dart';
@@ -93,11 +94,21 @@ class BlockListsScreen extends ConsumerStatefulWidget {
 
 class _BlockListsScreenState extends ConsumerState<BlockListsScreen> {
   var _labels = false;
+  String? _catalogSeen;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final state = ref.watch(focusControllerProvider);
+    final catalogKey = _catalogKey(state);
+    final previous = _catalogSeen;
+    final switchedTab =
+        previous != null &&
+        previous.startsWith('labels:') != catalogKey.startsWith('labels:');
+    _catalogSeen = catalogKey;
+    final catalogFrom = switchedTab
+        ? (_labels ? const Offset(1, 0) : const Offset(-1, 0))
+        : const Offset(0, 1);
 
     return SafeArea(
       bottom: false,
@@ -106,6 +117,7 @@ class _BlockListsScreenState extends ConsumerState<BlockListsScreen> {
         children: [
           ScreenHeader(
             title: _labels ? tr('lists_labels') : tr('lists_title'),
+            titleFrom: catalogFrom,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -152,23 +164,47 @@ class _BlockListsScreenState extends ConsumerState<BlockListsScreen> {
             },
           ),
           const SizedBox(height: 20),
-          if (_labels)
-            for (var i = 0; i < state.labels.length; i++) ...[
-              if (i > 0) const SizedBox(height: 10),
-              SurfaceCard(radius: 14, child: _LabelRow(label: state.labels[i])),
-            ]
-          else if (state.lists.isEmpty)
-            EmptyState(
-              icon: CupertinoIcons.square_stack_3d_up,
-              message: tr('lists_empty'),
-            )
-          else
-            for (var i = 0; i < state.lists.length; i++) ...[
-              if (i > 0) const SizedBox(height: 10),
-              SurfaceCard(child: _BlockListTile(list: state.lists[i])),
-            ],
+          MotionSwap(
+            switchKey: catalogKey,
+            from: catalogFrom,
+            child: _catalog(state),
+          ),
         ],
       ),
+    );
+  }
+
+  String _catalogKey(FocusState state) {
+    if (_labels) {
+      return 'labels:${[for (final label in state.labels) '${label.id}:${label.emoji}:${label.name}'].join('|')}';
+    }
+    return 'lists:${[for (final list in state.lists) '${list.id}:${list.name}:${list.applicationCount}:${list.categoryCount}:${list.webDomainCount}'].join('|')}';
+  }
+
+  Widget _catalog(FocusState state) {
+    if (_labels) {
+      return Column(
+        children: [
+          for (var i = 0; i < state.labels.length; i++) ...[
+            if (i > 0) const SizedBox(height: 10),
+            SurfaceCard(radius: 14, child: _LabelRow(label: state.labels[i])),
+          ],
+        ],
+      );
+    }
+    if (state.lists.isEmpty) {
+      return EmptyState(
+        icon: CupertinoIcons.square_stack_3d_up,
+        message: tr('lists_empty'),
+      );
+    }
+    return Column(
+      children: [
+        for (var i = 0; i < state.lists.length; i++) ...[
+          if (i > 0) const SizedBox(height: 10),
+          SurfaceCard(child: _BlockListTile(list: state.lists[i])),
+        ],
+      ],
     );
   }
 }
@@ -256,13 +292,15 @@ class _ViewTab extends StatelessWidget {
         onTap: onTap,
         behavior: HitTestBehavior.opaque,
         child: Center(
-          child: Text(
-            label,
-            style: theme.textTheme.labelLarge?.copyWith(
+          child: AnimatedDefaultTextStyle(
+            duration: kMotion,
+            curve: kMotionCurve,
+            style: (theme.textTheme.labelLarge ?? const TextStyle()).copyWith(
               fontWeight: FontWeight.w600,
               letterSpacing: -0.2,
               color: selected ? scheme.onSurface : scheme.onSurfaceVariant,
             ),
+            child: Text(label),
           ),
         ),
       ),
@@ -354,14 +392,18 @@ class _BlockListTile extends ConsumerWidget {
                 HapticFeedback.selectionClick();
                 ref.read(focusControllerProvider.notifier).setFavorite(list.id);
               },
-              icon: Icon(
-                list.isFavorite
-                    ? CupertinoIcons.star_fill
-                    : CupertinoIcons.star,
-                size: 18,
-                color: list.isFavorite
-                    ? scheme.primary
-                    : scheme.onSurfaceVariant,
+              icon: MotionSwap(
+                switchKey: list.isFavorite,
+                alignment: Alignment.center,
+                child: Icon(
+                  list.isFavorite
+                      ? CupertinoIcons.star_fill
+                      : CupertinoIcons.star,
+                  size: 18,
+                  color: list.isFavorite
+                      ? scheme.primary
+                      : scheme.onSurfaceVariant,
+                ),
               ),
             ),
             IconButton(

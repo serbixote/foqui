@@ -10,6 +10,7 @@ import '../models/focus_label.dart';
 import '../models/focus_stats.dart';
 import '../state/focus_controller.dart';
 import '../widgets/empty_state.dart';
+import '../widgets/motion.dart';
 import '../widgets/floating_tab_bar.dart';
 import '../widgets/screen_header.dart';
 import '../widgets/surface_card.dart';
@@ -400,9 +401,17 @@ class _DayBar extends StatelessWidget {
             Expanded(
               child: Align(
                 alignment: Alignment.bottomCenter,
-                child: FractionallySizedBox(
-                  heightFactor: seconds <= 0 ? 0.035 : visible,
-                  widthFactor: 1,
+                child: TweenAnimationBuilder<double>(
+                  tween: Tween<double>(end: seconds <= 0 ? 0.035 : visible),
+                  duration: kMotion,
+                  curve: kMotionCurve,
+                  builder: (context, height, child) {
+                    return FractionallySizedBox(
+                      heightFactor: height,
+                      widthFactor: 1,
+                      child: child,
+                    );
+                  },
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: barColor,
@@ -530,12 +539,19 @@ class _ShareTile extends StatelessWidget {
           const SizedBox(height: 8),
           ClipRRect(
             borderRadius: BorderRadius.circular(99),
-            child: LinearProgressIndicator(
-              value: share,
-              minHeight: 4,
-              backgroundColor: scheme.outlineVariant,
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(99),
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(end: share),
+              duration: kMotion,
+              curve: kMotionCurve,
+              builder: (context, value, _) {
+                return LinearProgressIndicator(
+                  value: value,
+                  minHeight: 4,
+                  backgroundColor: scheme.outlineVariant,
+                  color: scheme.primary,
+                  borderRadius: BorderRadius.circular(99),
+                );
+              },
             ),
           ),
         ],

@@ -1432,7 +1432,7 @@ void main() {
     expect(repository.sessions.single.outcome, SessionOutcome.endedEarly);
   });
 
-  testWidgets('ending before five minutes says the session will not be saved', (
+  testWidgets('ending before five minutes says the session has to keep going', (
     tester,
   ) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -1474,21 +1474,22 @@ void main() {
     );
     await settleApp(tester);
 
-    await tester.tap(find.byTooltip('End session'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Stop'));
     await pumpTransitions(tester);
 
-    expect(find.text('Stay a little longer'), findsOneWidget);
+    expect(find.text("You can't end yet"), findsOneWidget);
     expect(
       find.text(
-        "Sessions shorter than 5 minutes won't be recorded in your history.",
+        'You can end this session once it has been going for 5 minutes.',
       ),
       findsOneWidget,
     );
+    expect(find.widgetWithText(TextButton, 'End session'), findsNothing);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Keep focusing'));
     await pumpTransitions(tester);
 
-    expect(find.text('Stay a little longer'), findsNothing);
+    expect(find.text("You can't end yet"), findsNothing);
     expect(repository.sessions.single.outcome, SessionOutcome.active);
   });
 
@@ -1514,7 +1515,7 @@ void main() {
           id: 'live',
           blockListId: 'work',
           blockListName: 'Work',
-          startedAt: now.subtract(const Duration(minutes: 4)),
+          startedAt: now.subtract(const Duration(minutes: 5)),
           endsAt: now.add(const Duration(minutes: 21)),
           outcome: SessionOutcome.active,
         ),
@@ -1537,13 +1538,28 @@ void main() {
     expect(find.text('In progress'), findsOneWidget);
     expect(find.text('Work'), findsOneWidget);
     expect(find.text('Pause'), findsOneWidget);
-    expect(find.byTooltip('You can pause after 5 minutes.'), findsOneWidget);
+    expect(find.byTooltip('You can pause after 20 minutes.'), findsOneWidget);
     expect(
       tester
           .widget<FilledButton>(find.widgetWithText(FilledButton, 'Pause'))
           .onPressed,
-      isNull,
+      isNotNull,
     );
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Pause'));
+    await pumpTransitions(tester);
+    expect(find.text("Pause isn't available yet"), findsOneWidget);
+    expect(
+      find.text(
+        'You can pause once this session has been going for more than 20 minutes.',
+      ),
+      findsOneWidget,
+    );
+    expect(repository.sessions.single.outcome, SessionOutcome.active);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Keep focusing'));
+    await pumpTransitions(tester);
+    expect(find.text("Pause isn't available yet"), findsNothing);
     expect(find.text('Stop'), findsOneWidget);
     expect(
       tester.getSize(find.byType(SessionLiveActivity)).height,
@@ -1679,16 +1695,26 @@ void main() {
           id: 'live',
           blockListId: 'work',
           blockListName: 'Work',
-          startedAt: now.subtract(const Duration(minutes: 6)),
-          endsAt: now.add(const Duration(minutes: 19)),
+          startedAt: now.subtract(const Duration(minutes: 21)),
+          endsAt: now.add(const Duration(minutes: 24)),
           outcome: SessionOutcome.active,
           sharedSessionId: 'room',
         ),
       ],
     );
     const members = [
-      SessionParticipant(uid: 'test-user', name: 'Marco', joinedAt: null),
-      SessionParticipant(uid: 'ada', name: 'Ada', joinedAt: null),
+      SessionParticipant(
+        uid: 'test-user',
+        name: 'Marco',
+        joinedAt: null,
+        username: 'marco',
+      ),
+      SessionParticipant(
+        uid: 'ada',
+        name: 'Ada',
+        joinedAt: null,
+        username: 'ada',
+      ),
     ];
 
     await tester.pumpWidget(
@@ -1711,6 +1737,8 @@ void main() {
     expect(find.text('Leave'), findsOneWidget);
     expect(find.text('Stop'), findsNothing);
     expect(find.text('In progress'), findsOneWidget);
+    expect(find.text('Marco (marco)'), findsOneWidget);
+    expect(find.text('Ada (ada)'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(FilledButton, 'Pause'));
     await pumpTransitions(tester);
