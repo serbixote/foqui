@@ -86,6 +86,7 @@ class _LeaveSessionSheet extends ConsumerStatefulWidget {
 class _LeaveSessionSheetState extends ConsumerState<_LeaveSessionSheet> {
   var _closing = false;
   Timer? _clock;
+  FocusSession? _visible;
 
   @override
   void initState() {
@@ -101,20 +102,47 @@ class _LeaveSessionSheetState extends ConsumerState<_LeaveSessionSheet> {
     super.dispose();
   }
 
+  /// Pops this sheet once. A second pop removes the page underneath it,
+  /// and the navigator behind that page is black.
+  void _close(bool leave) {
+    if (_closing) return;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
+    _closing = true;
+    Navigator.of(context).pop(leave);
+  }
+
+  void _dismissIfSessionGone() {
+    if (_closing) return;
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+    _closing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final active = ModalRoute.of(context);
+      if (active == null || !active.isCurrent) return;
+      Navigator.of(context).pop(false);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(focusControllerProvider);
     final candidate = state.foregroundSession;
-    if (candidate == null || candidate.outcome == SessionOutcome.created) {
-      if (!_closing) {
-        _closing = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) Navigator.of(context).pop(false);
-        });
-      }
-      return const SizedBox.shrink();
+    final live =
+        candidate != null && candidate.outcome != SessionOutcome.created;
+    if (live) {
+      _visible = candidate;
+    } else {
+      _dismissIfSessionGone();
     }
-    final session = candidate;
+    final session = live ? candidate : _visible;
+    if (session == null) {
+      return const ColoredBox(
+        color: FoquiColors.surface,
+        child: SizedBox(width: double.infinity, height: 48),
+      );
+    }
     final counts = sessionMeetsRecordedLength(session, DateTime.now());
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
@@ -147,13 +175,13 @@ class _LeaveSessionSheetState extends ConsumerState<_LeaveSessionSheet> {
         if (!counts) ...[const SizedBox(height: 16), const ShortSessionNote()],
         const SizedBox(height: 20),
         FilledButton(
-          onPressed: () => Navigator.of(context).pop(false),
+          onPressed: () => _close(false),
           style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(56)),
           child: Text(tr('end_keep')),
         ),
         const SizedBox(height: 4),
         TextButton(
-          onPressed: () => Navigator.of(context).pop(true),
+          onPressed: () => _close(true),
           style: TextButton.styleFrom(
             foregroundColor: FoquiColors.destructive,
             minimumSize: const Size.fromHeight(48),

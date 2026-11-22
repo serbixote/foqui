@@ -36,6 +36,7 @@ class EndSessionSheet extends ConsumerStatefulWidget {
 class _EndSessionSheetState extends ConsumerState<EndSessionSheet> {
   var _closing = false;
   Timer? _clock;
+  FocusSession? _visible;
 
   @override
   void initState() {
@@ -55,26 +56,47 @@ class _EndSessionSheetState extends ConsumerState<EndSessionSheet> {
 
   void _endSession() => _close(true);
 
+  /// Pops this sheet once. A second pop removes the page underneath it,
+  /// and the navigator behind that page is black.
   void _close(bool end) {
     if (_closing) return;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return;
     _closing = true;
     Navigator.of(context).pop(end);
+  }
+
+  void _dismissIfSessionGone() {
+    if (_closing) return;
+    final route = ModalRoute.of(context);
+    if (route == null || !route.isCurrent) return;
+    _closing = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final active = ModalRoute.of(context);
+      if (active == null || !active.isCurrent) return;
+      Navigator.of(context).pop(false);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(focusControllerProvider);
     final candidate = state.foregroundSession;
-    if (candidate == null || candidate.outcome == SessionOutcome.created) {
-      if (!_closing) {
-        _closing = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) Navigator.of(context).pop(false);
-        });
-      }
-      return const SizedBox.shrink();
+    final live =
+        candidate != null && candidate.outcome != SessionOutcome.created;
+    if (live) {
+      _visible = candidate;
+    } else {
+      _dismissIfSessionGone();
     }
-    final session = candidate;
+    final session = live ? candidate : _visible;
+    if (session == null) {
+      return const ColoredBox(
+        color: FoquiColors.surface,
+        child: SizedBox(width: double.infinity, height: 48),
+      );
+    }
     final counts = sessionMeetsRecordedLength(session, DateTime.now());
 
     final theme = Theme.of(context);

@@ -1643,6 +1643,7 @@ void main() {
 
     await tester.tap(find.widgetWithText(TextButton, 'End session'));
     await pumpTransitions(tester);
+    await tester.pump(const Duration(seconds: 1));
 
     expect(find.byTooltip('Start Focus'), findsOneWidget);
     expect(find.text('Members (1)'), findsNothing);
@@ -1736,6 +1737,8 @@ void main() {
 
     await tester.tap(find.widgetWithText(TextButton, 'Leave'));
     await pumpTransitions(tester);
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.byType(HomeScreen), findsOneWidget);
     expect(find.byTooltip('Start Focus'), findsOneWidget);
     expect(repository.sessions.single.outcome, SessionOutcome.endedEarly);
   });
