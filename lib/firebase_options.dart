@@ -51,7 +51,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyBGU_turnKeAcDA8czJrAaJwpLxHUwPnnE',
-    appId: '1:486004582512:android:6a0dac90abc8e0d28a6cb5',
+    appId: '1:486004582512:android:d85d67522d975dd88a6cb5',
     messagingSenderId: '486004582512',
     projectId: 'theboringbuilders-foqui',
     storageBucket: 'theboringbuilders-foqui.firebasestorage.app',

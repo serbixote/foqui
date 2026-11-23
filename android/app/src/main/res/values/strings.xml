@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_accessibility_label">Foqui</string>
+    <string name="focus_accessibility_description">During a focus session, Foqui notices when you open an app you chose to block and shows its block screen. It does not read what is on the screen.</string>
+    <string name="shield_ok">OK</string>
+    <string name="picker_title">Choose apps</string>
+    <string name="picker_search">Search</string>
+    <string name="picker_cancel">Cancel</string>
+    <string name="picker_done">Done</string>
+    <string name="picker_empty">No apps to show</string>
+    <string name="picker_loading">Loading apps</string>
+</resources>

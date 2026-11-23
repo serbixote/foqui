@@ -31,7 +31,7 @@
       "android": {
         "default": {
           "projectId": "theboringbuilders-foqui",
-          "appId": "1:486004582512:android:6a0dac90abc8e0d28a6cb5",
+          "appId": "1:486004582512:android:d85d67522d975dd88a6cb5",
           "fileOutput": "android/app/google-services.json"
         }
       },
@@ -47,7 +47,7 @@
         "lib/firebase_options.dart": {
           "projectId": "theboringbuilders-foqui",
           "configurations": {
-            "android": "1:486004582512:android:6a0dac90abc8e0d28a6cb5",
+            "android": "1:486004582512:android:d85d67522d975dd88a6cb5",
             "ios": "1:486004582512:ios:325707ecbf4178998a6cb5"
           }
         }

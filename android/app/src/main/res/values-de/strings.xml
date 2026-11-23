@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_accessibility_label">Foqui</string>
+    <string name="focus_accessibility_description">Während einer Sitzung merkt Foqui, wenn du eine App öffnest, die du blockieren wolltest, und zeigt den Blockierbildschirm. Es liest nicht, was auf dem Bildschirm steht.</string>
+    <string name="shield_ok">OK</string>
+    <string name="picker_title">Apps auswählen</string>
+    <string name="picker_search">Suchen</string>
+    <string name="picker_cancel">Abbrechen</string>
+    <string name="picker_done">Fertig</string>
+    <string name="picker_empty">Keine Apps zum Anzeigen</string>
+    <string name="picker_loading">Apps werden geladen</string>
+</resources>

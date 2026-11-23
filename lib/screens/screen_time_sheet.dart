@@ -29,9 +29,28 @@ class ScreenTimeSheet extends ConsumerStatefulWidget {
   ConsumerState<ScreenTimeSheet> createState() => _ScreenTimeSheetState();
 }
 
-class _ScreenTimeSheetState extends ConsumerState<ScreenTimeSheet> {
+class _ScreenTimeSheetState extends ConsumerState<ScreenTimeSheet>
+    with WidgetsBindingObserver {
   var _busy = false;
   var _closed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed || !mounted) return;
+    ref.read(authorizationProvider.notifier).refresh();
+  }
 
   void _finish() {
     if (_closed || !mounted) return;
@@ -61,7 +80,7 @@ class _ScreenTimeSheetState extends ConsumerState<ScreenTimeSheet> {
     final status =
         ref.watch(authorizationProvider).asData?.value ??
         FamilyControlsAuthorization.notDetermined;
-    final copy = _copyFor(status);
+    final copy = _copyFor(status, android: blocksWithAccessibility);
 
     ref.listen(authorizationProvider, (previous, next) {
       if (next.asData?.value.isAuthorized ?? false) _finish();
@@ -104,11 +123,23 @@ class _ScreenTimeSheetState extends ConsumerState<ScreenTimeSheet> {
                     ),
                   ),
                   const SizedBox(height: 18),
-                  const _Point('screen_time_point_list'),
+                  _Point(
+                    blocksWithAccessibility
+                        ? 'android_point_list'
+                        : 'screen_time_point_list',
+                  ),
                   const SizedBox(height: 12),
-                  const _Point('screen_time_point_timer'),
+                  _Point(
+                    blocksWithAccessibility
+                        ? 'android_point_timer'
+                        : 'screen_time_point_timer',
+                  ),
                   const SizedBox(height: 12),
-                  const _Point('screen_time_point_scope'),
+                  _Point(
+                    blocksWithAccessibility
+                        ? 'android_point_scope'
+                        : 'screen_time_point_scope',
+                  ),
                   const SizedBox(height: 22),
                   FilledButton(
                     onPressed: _busy ? null : () => _allow(copy.openSettings),
@@ -150,24 +181,37 @@ class _ScreenTimeCopy {
   final bool openSettings;
 }
 
-_ScreenTimeCopy _copyFor(FamilyControlsAuthorization status) {
+_ScreenTimeCopy _copyFor(
+  FamilyControlsAuthorization status, {
+  required bool android,
+}) {
   return switch (status) {
     FamilyControlsAuthorization.denied => _ScreenTimeCopy(
-      title: tr('screen_time_sheet_denied_title'),
-      body: tr('screen_time_sheet_denied_body'),
+      title: tr(
+        android
+            ? 'android_sheet_denied_title'
+            : 'screen_time_sheet_denied_title',
+      ),
+      body: tr(
+        android ? 'android_sheet_denied_body' : 'screen_time_sheet_denied_body',
+      ),
       action: tr('home_open_settings'),
       openSettings: true,
     ),
     FamilyControlsAuthorization.unknown => _ScreenTimeCopy(
-      title: tr('screen_time_sheet_unknown_title'),
-      body: tr('screen_time_sheet_unknown_body'),
+      title: tr(
+        android ? 'android_sheet_title' : 'screen_time_sheet_unknown_title',
+      ),
+      body: tr(
+        android ? 'android_sheet_body' : 'screen_time_sheet_unknown_body',
+      ),
       action: tr('screen_time_try_again'),
       openSettings: false,
     ),
     _ => _ScreenTimeCopy(
-      title: tr('screen_time_sheet_title'),
-      body: tr('screen_time_sheet_body'),
-      action: tr('home_allow_screen_time'),
+      title: tr(android ? 'android_sheet_title' : 'screen_time_sheet_title'),
+      body: tr(android ? 'android_sheet_body' : 'screen_time_sheet_body'),
+      action: tr(android ? 'android_home_allow' : 'home_allow_screen_time'),
       openSettings: false,
     ),
   };

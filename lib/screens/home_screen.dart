@@ -342,25 +342,40 @@ class _PermissionBanner extends ConsumerWidget {
     final scheme = theme.colorScheme;
     final unavailable = status == FamilyControlsAuthorization.unavailable;
     final denied = status == FamilyControlsAuthorization.denied;
+    final android = blocksWithAccessibility;
     final (lead, detail) = switch (status) {
       FamilyControlsAuthorization.unavailable => (
         tr('home_screen_time_simulator_lead'),
         tr('home_screen_time_simulator'),
       ),
-      FamilyControlsAuthorization.denied => (
-        tr('home_screen_time_denied_lead'),
-        tr('home_screen_time_denied'),
-      ),
-      FamilyControlsAuthorization.unknown => (
-        tr('home_screen_time_unknown_lead'),
-        tr('home_screen_time_unknown'),
-      ),
-      _ => (tr('home_screen_time_needed_lead'), tr('home_screen_time_needed')),
+      FamilyControlsAuthorization.denied =>
+        android
+            ? (tr('android_home_denied_lead'), tr('android_home_denied'))
+            : (
+                tr('home_screen_time_denied_lead'),
+                tr('home_screen_time_denied'),
+              ),
+      FamilyControlsAuthorization.unknown =>
+        android
+            ? (tr('android_home_needed_lead'), tr('android_home_needed'))
+            : (
+                tr('home_screen_time_unknown_lead'),
+                tr('home_screen_time_unknown'),
+              ),
+      _ =>
+        android
+            ? (tr('android_home_needed_lead'), tr('android_home_needed'))
+            : (
+                tr('home_screen_time_needed_lead'),
+                tr('home_screen_time_needed'),
+              ),
     };
     final action = denied
         ? tr('home_open_settings')
         : status == FamilyControlsAuthorization.unknown
         ? tr('screen_time_try_again')
+        : android
+        ? tr('android_home_allow')
         : tr('home_allow_screen_time');
 
     return Padding(
@@ -389,7 +404,7 @@ class _PermissionBanner extends ConsumerWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    tr('home_screen_time'),
+                    android ? tr('android_home_title') : tr('home_screen_time'),
                     style: theme.textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w600,
                     ),

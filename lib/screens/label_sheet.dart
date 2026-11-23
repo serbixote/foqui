@@ -1,69 +1,16 @@
 import 'dart:math' as math;
 
-import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../data/label_emojis.dart';
 import '../models/focus_label.dart';
 import '../l10n/tr.dart';
 import '../state/focus_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/motion.dart';
 import '../widgets/sheet_header.dart';
-
-List<CategoryEmoji> _emojiSet(Locale locale) {
-  return switch (locale.languageCode) {
-    'de' => emojiSetGerman,
-    'es' => emojiSetSpanish,
-    'fr' => emojiSetFrance,
-    'pt' => emojiSetPortuguese,
-    _ => emojiSetEnglish,
-  };
-}
-
-final _emojisByLanguage = <String, List<Emoji>>{};
-
-List<Emoji> _emojisFor(Locale locale) {
-  return _emojisByLanguage.putIfAbsent(locale.languageCode, () {
-    final seen = <String>{};
-    final emojis = <Emoji>[];
-    for (final group in _emojiSet(locale)) {
-      for (final emoji in group.emoji) {
-        if (seen.add(emoji.emoji)) emojis.add(emoji);
-      }
-    }
-    return emojis;
-  });
-}
-
-List<Emoji> _matchingEmojis(Locale locale, String query, String? current) {
-  final all = _emojisFor(locale);
-  final tokens = query
-      .trim()
-      .toLowerCase()
-      .split(RegExp(r'\s+'))
-      .where((token) => token.isNotEmpty)
-      .toList();
-  final matches = tokens.isEmpty
-      ? all
-      : [
-          for (final emoji in all)
-            if (_emojiMatches(emoji, tokens)) emoji,
-        ];
-  if (tokens.isEmpty &&
-      current != null &&
-      current.isNotEmpty &&
-      !matches.any((emoji) => emoji.emoji == current)) {
-    return [Emoji(current, current), ...matches];
-  }
-  return matches;
-}
-
-bool _emojiMatches(Emoji emoji, List<String> tokens) {
-  final words = [for (final word in emoji.keywords) word.toLowerCase()];
-  return tokens.every((token) => words.any((word) => word.contains(token)));
-}
 
 Future<void> showLabelSheet(BuildContext context, {FocusLabel? existing}) {
   return showModalBottomSheet<void>(
@@ -566,8 +513,8 @@ class _LabelIconPickerState extends State<_LabelIconPicker> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final icons = _matchingEmojis(
-      Localizations.localeOf(context),
+    final icons = matchingLabelEmojis(
+      Localizations.localeOf(context).languageCode,
       _query.text,
       widget.selected,
     );

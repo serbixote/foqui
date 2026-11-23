@@ -1194,8 +1194,16 @@ class _PermissionBody extends StatelessWidget {
       children: [
         _StepIntro(
           image: _stepArt[_Step.permission]!,
-          title: tr('onboarding_permission_title'),
-          body: tr('onboarding_permission_body'),
+          title: tr(
+            blocksWithAccessibility
+                ? 'android_permission_title'
+                : 'onboarding_permission_title',
+          ),
+          body: tr(
+            blocksWithAccessibility
+                ? 'android_permission_body'
+                : 'onboarding_permission_body',
+          ),
           compact: compact,
         ),
       ],
@@ -1235,7 +1243,11 @@ class _BlockListBody extends ConsumerWidget {
       FamilyControlsAuthorization.unavailable => tr(
         'onboarding_permission_unavailable',
       ),
-      _ => tr('onboarding_permission_required'),
+      _ => tr(
+        blocksWithAccessibility
+            ? 'android_permission_required'
+            : 'onboarding_permission_required',
+      ),
     };
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1298,9 +1310,8 @@ class _BlockListBody extends ConsumerWidget {
           const SizedBox(height: 12),
           Text(
             shown,
-            style: _body(theme)?.copyWith(
-              color: required ? const Color(0xFF30D158) : null,
-            ),
+            style: _body(theme)
+                ?.copyWith(color: required ? const Color(0xFF30D158) : null),
           ),
         ],
       ],

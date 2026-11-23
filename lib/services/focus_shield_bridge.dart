@@ -104,20 +104,26 @@ String describeShieldFailure(FocusShieldException exception) {
   }
 }
 
-/// Talks to Family Controls, the system app picker, and the focus shield.
+/// True on Android, where blocking uses an accessibility service.
+bool get blocksWithAccessibility => !kIsWeb && Platform.isAndroid;
+
+/// Talks to the system that shields apps during a focus session.
+///
+/// iOS uses Family Controls. Android uses an accessibility service that
+/// notices which app is open and shows the block screen.
 class FocusShieldBridge {
   FocusShieldBridge({MethodChannel? channel})
     : _channel = channel ?? const MethodChannel('foqui/focus_shield');
 
   final MethodChannel _channel;
 
-  bool get _isIos => !kIsWeb && Platform.isIOS;
+  bool get _canShield => !kIsWeb && (Platform.isIOS || Platform.isAndroid);
 
-  /// True when app tokens are stored on this device and can be checked.
-  bool get storesSelections => _isIos;
+  /// True when the apps for a list are stored on this device and can be checked.
+  bool get storesSelections => _canShield;
 
   Future<FamilyControlsAuthorization> status() async {
-    if (!_isIos) return FamilyControlsAuthorization.unavailable;
+    if (!_canShield) return FamilyControlsAuthorization.unavailable;
     try {
       final raw = await _channel.invokeMethod<String>('familyControlsStatus');
       return FamilyControlsAuthorization.fromRaw(raw);
@@ -128,7 +134,7 @@ class FocusShieldBridge {
   }
 
   Future<FamilyControlsAuthorization> requestAuthorization() async {
-    if (!_isIos) return FamilyControlsAuthorization.unavailable;
+    if (!_canShield) return FamilyControlsAuthorization.unavailable;
     try {
       final raw = await _channel.invokeMethod<String>(
         'requestFamilyControlsAuthorization',
@@ -141,7 +147,7 @@ class FocusShieldBridge {
   }
 
   Future<bool> openSystemSettings() async {
-    if (!_isIos) return false;
+    if (!_canShield) return false;
     try {
       return await _channel.invokeMethod<bool>('openSystemSettings') ?? false;
     } catch (error, stack) {
@@ -153,7 +159,7 @@ class FocusShieldBridge {
   /// Opens the system app picker. Returns null when the picker is dismissed
   /// without a choice. The selection stays in a draft until [commitSelection].
   Future<SelectionCounts?> presentAppPicker(String listId) async {
-    if (!_isIos) {
+    if (!_canShield) {
       throw const FocusShieldException('UNAVAILABLE', '');
     }
     try {
@@ -168,7 +174,7 @@ class FocusShieldBridge {
   }
 
   Future<SelectionCounts?> commitSelection(String listId) async {
-    if (!_isIos) return null;
+    if (!_canShield) return null;
     try {
       final raw = await _channel.invokeMethod<Object?>('commitSelection', {
         'listId': listId,
@@ -210,7 +216,7 @@ class FocusShieldBridge {
   Future<Map<String, List<String>>> applicationNames(
     List<String> listIds,
   ) async {
-    if (!_isIos || listIds.isEmpty) return const {};
+    if (!_canShield || listIds.isEmpty) return const {};
     try {
       final raw = await _channel.invokeMethod<Object?>('applicationNames', {
         'listIds': listIds,
@@ -231,7 +237,7 @@ class FocusShieldBridge {
   }
 
   Future<void> discardDraft(String listId) async {
-    if (!_isIos) return;
+    if (!_canShield) return;
     try {
       await _channel.invokeMethod<void>('discardDraft', {'listId': listId});
     } catch (error, stack) {
@@ -240,7 +246,7 @@ class FocusShieldBridge {
   }
 
   Future<void> deleteSelection(String listId) async {
-    if (!_isIos) return;
+    if (!_canShield) return;
     try {
       await _channel.invokeMethod<void>('deleteSelection', {'listId': listId});
     } catch (error, stack) {
@@ -258,7 +264,7 @@ class FocusShieldBridge {
     DateTime? endsAt,
     bool strict = true,
   }) async {
-    if (!_isIos) {
+    if (!_canShield) {
       if (strict) {
         throw const FocusShieldException('UNAVAILABLE', '');
       }
@@ -276,7 +282,7 @@ class FocusShieldBridge {
   }
 
   Future<void> stopSession() async {
-    if (!_isIos) return;
+    if (!_canShield) return;
     try {
       await _channel.invokeMethod<void>('stopSession');
     } catch (error, stack) {

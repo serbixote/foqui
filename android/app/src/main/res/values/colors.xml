@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="ic_launcher_background">#7733F3</color>
+    <color name="shield_canvas">#1C1C1E</color>
+    <color name="shield_body">#F2F2F7</color>
+    <color name="shield_violet">#8154E8</color>
+    <color name="shield_field">#2C2C2E</color>
+    <color name="shield_hint">#8E8E93</color>
 </resources>

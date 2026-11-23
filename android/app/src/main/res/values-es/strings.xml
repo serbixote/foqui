@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="focus_accessibility_label">Foqui</string>
+    <string name="focus_accessibility_description">Durante una sesión, Foqui detecta cuando abres una app que elegiste bloquear y muestra su pantalla de bloqueo. No lee lo que hay en la pantalla.</string>
+    <string name="shield_ok">OK</string>
+    <string name="picker_title">Elegir apps</string>
+    <string name="picker_search">Buscar</string>
+    <string name="picker_cancel">Cancelar</string>
+    <string name="picker_done">Listo</string>
+    <string name="picker_empty">No hay apps para mostrar</string>
+    <string name="picker_loading">Cargando apps</string>
+</resources>
