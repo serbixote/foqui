@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "486004582512-m6ba95qr4ahtgh49ra1s40vnqhost9f4.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "foqui.theboringbuilders.xyz",
+            "certificate_hash": "21fb2cf67e6db3ebf932b3931025efa7f36edc4a"
+          }
+        },
+        {
           "client_id": "486004582512-8f8sftr498gjgopvs178ljgn285c3rjb.apps.googleusercontent.com",
           "client_type": 3
         }
