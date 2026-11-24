@@ -27,7 +27,6 @@ import '../state/focus_controller.dart';
 import '../state/profile.dart';
 import '../theme/app_theme.dart';
 import 'motion.dart';
-import 'sheet_header.dart';
 
 const _liveGreen = Color(0xFF30D158);
 
@@ -573,6 +572,8 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
     }
 
     final chatOn = session.chatEnabled || shared?.chatEnabled == true;
+    final hasChat = chatOn || shared != null;
+    final hasBottom = hasChat || waiting;
     final showChat = _chatOpen;
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
     final unread = chatIsUnread(
@@ -604,178 +605,39 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
           bottom: !showChat || keyboard == 0,
           child: Padding(
             padding: EdgeInsets.only(bottom: showChat ? keyboard : 0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 10),
-                const SheetGrabber(),
-                Expanded(
-                  child: Navigator(
-                    initialRoute: null,
-                    onGenerateInitialRoutes: (navigator, initialRoute) =>
-                        const <Route<dynamic>>[],
-                    onDidRemovePage: _onChatPageRemoved,
-                    pages: [
-                      CupertinoPage(
-                        key: const ValueKey('session'),
-                        child: ColoredBox(
-                          color: scheme.surface,
+            child: Navigator(
+              initialRoute: null,
+              onGenerateInitialRoutes: (navigator, initialRoute) =>
+                  const <Route<dynamic>>[],
+              onDidRemovePage: _onChatPageRemoved,
+              pages: [
+                CupertinoPage(
+                  key: const ValueKey('session'),
+                  child: ColoredBox(
+                    color: scheme.surface,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  18,
-                                  20,
-                                  0,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    _BlockingCard(
-                                      name: blockListTitle(
-                                        id: session.blockListId,
-                                        name: session.blockListName,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 22),
-                                    Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      children: [
-                                        Expanded(
-                                          child: FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            alignment: Alignment.centerLeft,
-                                            child: _ElapsedClock(
-                                              elapsed: _elapsed(
-                                                session,
-                                                shownAt,
-                                              ),
-                                              total: _total(session),
-                                            ),
-                                          ),
+                              AnimatedSize(
+                                duration: kMotion,
+                                curve: kMotionCurve,
+                                alignment: Alignment.topCenter,
+                                child: waiting
+                                    ? const SizedBox(width: double.infinity)
+                                    : Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 14,
                                         ),
-                                        const SizedBox(width: 12),
-                                        _StatusLine(
-                                          label: session.outcomeLabel,
-                                          live: running,
-                                          pulse: _pulse,
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 14),
-                                    _LiveProgressBar(
-                                      value: progress,
-                                      slide: _slide,
-                                      color: FoquiColors.violet,
-                                      track: const Color(0xFF4A4A4E),
-                                    ),
-                                    const SizedBox(height: 22),
-                                    _SessionHeading(
-                                      labels: labels,
-                                      selected: _selectedLabel(session, labels),
-                                      onSelected: (index) {
-                                        if (index < 0 ||
-                                            index >= labels.length) {
-                                          return;
-                                        }
-                                        unawaited(
-                                          ref
-                                              .read(
-                                                focusControllerProvider
-                                                    .notifier,
-                                              )
-                                              .setSessionLabel(
-                                                sessionId: session.id,
-                                                label: labels[index],
-                                              ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: ListView(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    20,
-                                    22,
-                                    20,
-                                    20,
-                                  ),
-                                  children: [
-                                    _MemberList(
-                                      members: _membersFor(
-                                        session,
-                                        members,
-                                        userId: userId,
-                                        profile: profile,
-                                      ),
-                                      session: session,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.fromLTRB(
-                                  20,
-                                  8,
-                                  20,
-                                  12,
-                                ),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
-                                    if (chatOn || shared != null) ...[
-                                      _ChatButton(
-                                        enabled: chatOn,
-                                        unread: unread,
-                                        busy: _chatStarting,
-                                        onPressed: chatOn
-                                            ? () => _openChat(shared)
-                                            : () => _startChat(shared!),
-                                      ),
-                                      const SizedBox(height: 12),
-                                    ],
-                                    AnimatedSize(
-                                      duration: kMotion,
-                                      curve: kMotionCurve,
-                                      alignment: Alignment.topCenter,
-                                      child: voteOpen
-                                          ? Padding(
-                                              padding: const EdgeInsets.only(
-                                                bottom: 12,
-                                              ),
-                                              child: _PauseVote(
-                                                request: request,
-                                                userId: userId,
-                                                busy: _busy,
-                                                onAccept: () =>
-                                                    _vote(accept: true),
-                                                onDecline: () =>
-                                                    _vote(accept: false),
-                                              ),
-                                            )
-                                          : const SizedBox(
-                                              width: double.infinity,
-                                            ),
-                                    ),
-                                    MotionSwap(
-                                      switchKey: waiting
-                                          ? 'waiting'
-                                          : 'running',
-                                      child: waiting
-                                          ? _WaitingActions(
-                                              busy: _busy,
-                                              canStart: !waitingForHost,
-                                              onStart: () => _begin(session),
-                                              onCancel: () => _cancel(session),
-                                            )
-                                          : _RunningActions(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            _RunningActions(
                                               busy: _busy,
                                               pausing: _pausing,
                                               paused: paused,
@@ -815,28 +677,161 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
                                                         .person_crop_circle_badge_minus
                                                   : CupertinoIcons.stop_fill,
                                             ),
-                                    ),
-                                  ],
+                                            AnimatedSize(
+                                              duration: kMotion,
+                                              curve: kMotionCurve,
+                                              alignment: Alignment.topCenter,
+                                              child: voteOpen
+                                                  ? Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            top: 12,
+                                                          ),
+                                                      child: _PauseVote(
+                                                        request: request,
+                                                        userId: userId,
+                                                        busy: _busy,
+                                                        onAccept: () =>
+                                                            _vote(accept: true),
+                                                        onDecline: () => _vote(
+                                                          accept: false,
+                                                        ),
+                                                      ),
+                                                    )
+                                                  : const SizedBox(
+                                                      width: double.infinity,
+                                                    ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                              ),
+                              _BlockingCard(
+                                name: blockListTitle(
+                                  id: session.blockListId,
+                                  name: session.blockListName,
                                 ),
+                              ),
+                              const SizedBox(height: 22),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Expanded(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      alignment: Alignment.bottomLeft,
+                                      child: _ElapsedClock(
+                                        elapsed: _elapsed(session, shownAt),
+                                        total: _total(session),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  _StatusLine(
+                                    label: session.outcomeLabel,
+                                    live: running,
+                                    pulse: _pulse,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 14),
+                              _LiveProgressBar(
+                                value: progress,
+                                slide: _slide,
+                                color: FoquiColors.violet,
+                                track: const Color(0xFF4A4A4E),
+                              ),
+                              const SizedBox(height: 22),
+                              _SessionHeading(
+                                labels: labels,
+                                selected: _selectedLabel(session, labels),
+                                onSelected: (index) {
+                                  if (index < 0 || index >= labels.length) {
+                                    return;
+                                  }
+                                  unawaited(
+                                    ref
+                                        .read(focusControllerProvider.notifier)
+                                        .setSessionLabel(
+                                          sessionId: session.id,
+                                          label: labels[index],
+                                        ),
+                                  );
+                                },
                               ),
                             ],
                           ),
                         ),
-                      ),
-                      if (_chatOpen)
-                        CupertinoPage(
-                          key: const ValueKey('session-chat'),
-                          child: ColoredBox(
-                            color: scheme.surface,
-                            child: SessionChatPage(
-                              sessionId: sharedId,
-                              onBack: _closeChat,
-                            ),
+                        Expanded(
+                          child: ListView(
+                            padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+                            children: [
+                              _MemberList(
+                                members: _membersFor(
+                                  session,
+                                  members,
+                                  userId: userId,
+                                  profile: profile,
+                                ),
+                                session: session,
+                              ),
+                            ],
                           ),
                         ),
-                    ],
+                        if (hasBottom)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (hasChat)
+                                  _ChatButton(
+                                    enabled: chatOn,
+                                    unread: unread,
+                                    busy: _chatStarting,
+                                    onPressed: chatOn
+                                        ? () => _openChat(shared)
+                                        : () => _startChat(shared!),
+                                  ),
+                                AnimatedSize(
+                                  duration: kMotion,
+                                  curve: kMotionCurve,
+                                  alignment: Alignment.bottomCenter,
+                                  child: waiting
+                                      ? Padding(
+                                          padding: EdgeInsets.only(
+                                            top: hasChat ? 12 : 0,
+                                          ),
+                                          child: _WaitingActions(
+                                            busy: _busy,
+                                            canStart: !waitingForHost,
+                                            onStart: () => _begin(session),
+                                            onCancel: () => _cancel(session),
+                                          ),
+                                        )
+                                      : const SizedBox(width: double.infinity),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
+                if (_chatOpen)
+                  CupertinoPage(
+                    key: const ValueKey('session-chat'),
+                    child: ColoredBox(
+                      color: scheme.surface,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 10),
+                        child: SessionChatPage(
+                          sessionId: sharedId,
+                          onBack: _closeChat,
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -928,6 +923,16 @@ class _RunningActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final pauseForeground = scheme.onSurface.withValues(
+      alpha: paused ? 0.95 : 0.78,
+    );
+    const compactText = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w600,
+      letterSpacing: -0.1,
+    );
+    const compactPadding = EdgeInsets.symmetric(horizontal: 12);
+
     return Row(
       children: [
         Expanded(
@@ -947,13 +952,16 @@ class _RunningActions extends StatelessWidget {
                   ? null
                   : onPause,
               style: FilledButton.styleFrom(
-                backgroundColor: FoquiColors.raised,
-                foregroundColor: scheme.onSurface,
-                disabledBackgroundColor: FoquiColors.raised,
+                backgroundColor: FoquiColors.grouped,
+                foregroundColor: pauseForeground,
+                disabledBackgroundColor: FoquiColors.grouped,
                 disabledForegroundColor: scheme.onSurface.withValues(
-                  alpha: 0.4,
+                  alpha: 0.35,
                 ),
-                minimumSize: const Size.fromHeight(52),
+                minimumSize: const Size.fromHeight(40),
+                padding: compactPadding,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: compactText,
               ),
               icon: MotionSwap(
                 switchKey: pausing
@@ -964,18 +972,18 @@ class _RunningActions extends StatelessWidget {
                 alignment: Alignment.center,
                 child: pausing
                     ? SizedBox(
-                        width: 18,
-                        height: 18,
+                        width: 14,
+                        height: 14,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: scheme.onSurface,
+                          strokeWidth: 2,
+                          color: pauseForeground,
                         ),
                       )
                     : Icon(
                         paused
                             ? CupertinoIcons.play_fill
                             : CupertinoIcons.pause,
-                        size: 16,
+                        size: 14,
                       ),
               ),
               label: MotionSwap(
@@ -988,34 +996,41 @@ class _RunningActions extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
           child: Tooltip(
             message: stopTooltip,
             child: FilledButton.icon(
               onPressed: busy ? null : onStop,
               style: FilledButton.styleFrom(
-                backgroundColor: FoquiColors.destructive,
-                foregroundColor: Colors.white,
+                backgroundColor: FoquiColors.destructive.withValues(
+                  alpha: 0.14,
+                ),
+                foregroundColor: FoquiColors.destructive,
                 disabledBackgroundColor: FoquiColors.destructive.withValues(
+                  alpha: 0.08,
+                ),
+                disabledForegroundColor: FoquiColors.destructive.withValues(
                   alpha: 0.4,
                 ),
-                disabledForegroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(52),
+                minimumSize: const Size.fromHeight(40),
+                padding: compactPadding,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                textStyle: compactText,
               ),
               icon: MotionSwap(
                 switchKey: busy && !pausing ? 'busy' : stopIcon,
                 alignment: Alignment.center,
                 child: busy && !pausing
                     ? const SizedBox(
-                        width: 18,
-                        height: 18,
+                        width: 14,
+                        height: 14,
                         child: CircularProgressIndicator(
-                          strokeWidth: 2.2,
-                          color: Colors.white,
+                          strokeWidth: 2,
+                          color: FoquiColors.destructive,
                         ),
                       )
-                    : Icon(stopIcon, size: 16),
+                    : Icon(stopIcon, size: 14),
               ),
               label: Text(stopLabel),
             ),
@@ -1331,9 +1346,9 @@ class _StatusLine extends StatelessWidget {
           child: Text(
             label,
             style: theme.textTheme.titleSmall?.copyWith(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
+              fontSize: 13,
+              fontWeight: FontWeight.w500,
+              letterSpacing: -0.1,
               height: 1.1,
               color: theme.colorScheme.onSurface,
             ),

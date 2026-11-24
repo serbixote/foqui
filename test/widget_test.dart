@@ -1562,6 +1562,17 @@ void main() {
     await pumpTransitions(tester);
     expect(find.text("Pause isn't available yet"), findsNothing);
     expect(find.text('Stop'), findsOneWidget);
+    final blockingTop = tester
+        .getTopLeft(find.text('Foqui is blocking apps from:'))
+        .dy;
+    expect(
+      tester.getBottomLeft(find.widgetWithText(FilledButton, 'Pause')).dy,
+      lessThan(blockingTop),
+    );
+    expect(
+      tester.getBottomLeft(find.widgetWithText(FilledButton, 'Stop')).dy,
+      lessThan(blockingTop),
+    );
     expect(
       tester.getSize(find.byType(SessionLiveActivity)).height,
       moreOrLessEquals(844, epsilon: 1),
@@ -1588,6 +1599,10 @@ void main() {
       find.text('Your block lists and sessions stay on this account.'),
       findsNothing,
     );
+    if (find.text('End this session?').evaluate().isNotEmpty) {
+      await tester.tap(find.widgetWithText(FilledButton, 'Keep focusing'));
+      await pumpTransitions(tester);
+    }
 
     expect(find.text('Members (1)'), findsOneWidget);
     expect(find.text('You'), findsOneWidget);
