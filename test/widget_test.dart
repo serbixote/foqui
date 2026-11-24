@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:foqui/models/block_list.dart';
 import 'package:foqui/models/focus_label.dart';
 import 'package:foqui/models/focus_session.dart';
+import 'package:foqui/models/session_chat.dart';
 import 'package:foqui/models/shared_session.dart';
 import 'package:foqui/repositories/invite.dart';
 import 'package:foqui/screens/block_lists_screen.dart';
@@ -1841,6 +1842,169 @@ void main() {
 
     expect(find.text('Paused'), findsOneWidget);
     expect(repository.sessions.single.outcome, SessionOutcome.paused);
+  });
+
+  testWidgets('the new session sheet can turn chat on', (tester) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final repository = MemoryFocusRepository(
+      lists: [
+        BlockList(
+          id: 'social',
+          name: 'Social',
+          applicationCount: 1,
+          categoryCount: 0,
+          webDomainCount: 0,
+          updatedAt: DateTime.utc(2026, 1, 2),
+          isFavorite: true,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith(LoggedInAuthNotifier.new),
+          focusRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const FoquiApp(),
+      ),
+    );
+    await settleApp(tester);
+
+    await tester.tap(find.byTooltip('Start Focus'));
+    await pumpTransitions(tester);
+    expect(find.text('Chat'), findsOneWidget);
+    expect(
+      find.text('Messages with the people in this session'),
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<CupertinoSwitch>(find.byType(CupertinoSwitch)).value,
+      isFalse,
+    );
+
+    await tester.tap(find.byType(CupertinoSwitch));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(TextButton, 'Create Session'));
+    await pumpTransitions(tester);
+
+    expect(repository.sessions.single.chatEnabled, isTrue);
+    await tester.pump(const Duration(seconds: 1));
+    final chat = find.widgetWithText(FilledButton, 'Chat');
+    expect(chat, findsOneWidget);
+    expect(tester.getCenter(chat).dy, lessThan(844));
+
+    await tester.tap(chat);
+    await pumpTransitions(tester);
+    expect(find.text('No messages yet'), findsOneWidget);
+  });
+
+  testWidgets('the session sheet opens chat and clears the new-message dot', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final now = DateTime.now();
+    final repository = MemoryFocusRepository(
+      lists: [
+        BlockList(
+          id: 'work',
+          name: 'Work',
+          applicationCount: 1,
+          categoryCount: 0,
+          webDomainCount: 0,
+          updatedAt: now,
+        ),
+      ],
+      sessions: [
+        FocusSession(
+          id: 'live',
+          blockListId: 'work',
+          blockListName: 'Work',
+          startedAt: now.subtract(const Duration(minutes: 21)),
+          endsAt: now.add(const Duration(minutes: 24)),
+          outcome: SessionOutcome.active,
+          sharedSessionId: 'room',
+        ),
+      ],
+    );
+    const members = [
+      SessionParticipant(
+        uid: 'test-user',
+        name: 'Marco',
+        joinedAt: null,
+        username: 'marco',
+      ),
+      SessionParticipant(
+        uid: 'ada',
+        name: 'Ada',
+        joinedAt: null,
+        username: 'ada',
+      ),
+    ];
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith(LoggedInAuthNotifier.new),
+          focusRepositoryProvider.overrideWithValue(repository),
+          participantsProvider.overrideWith(
+            (ref, sessionId) => Stream.value(members),
+          ),
+          pauseRequestProvider.overrideWith(
+            (ref, sessionId) => Stream.value(null),
+          ),
+          sharedSessionProvider.overrideWith(
+            (ref, sessionId) => Stream.value(
+              SharedSession(
+                id: 'room',
+                hostId: 'ada',
+                hostName: 'Ada',
+                title: 'Focus',
+                labelEmoji: null,
+                durationMinutes: 45,
+                status: SharedSessionStatus.active,
+                startedAt: now.subtract(const Duration(minutes: 21)),
+                endsAt: now.add(const Duration(minutes: 24)),
+                createdAt: now,
+                expiresAt: now.add(const Duration(hours: 2)),
+                chatEnabled: true,
+                chatAt: now,
+                chatBy: 'ada',
+              ),
+            ),
+          ),
+          sessionChatProvider.overrideWith(
+            (ref, sessionId) =>
+                Stream<List<SessionChatMessage>>.value(const []),
+          ),
+        ],
+        child: const FoquiApp(),
+      ),
+    );
+    await settleApp(tester);
+
+    expect(find.text('Chat'), findsOneWidget);
+    expect(find.byKey(const Key('chat-unread')), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Chat'));
+    await pumpTransitions(tester);
+    expect(find.text('No messages yet'), findsOneWidget);
+    expect(find.text('Members (2)').hitTestable(), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 500));
+    final gesture = await tester.startGesture(const Offset(4, 500));
+    await gesture.moveBy(const Offset(200, 0));
+    await tester.pump();
+    await gesture.moveBy(const Offset(160, 0));
+    await gesture.up();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('Members (2)').hitTestable(), findsOneWidget);
+    expect(find.byKey(const Key('chat-unread')), findsNothing);
   });
 }
 

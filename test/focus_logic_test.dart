@@ -744,101 +744,104 @@ void main() {
     expect(repository.sessions.single.outcome, SessionOutcome.active);
   });
 
-  test('a joined room that has not started waits on the same session', () async {
-    final repository = MemoryFocusRepository(
-      lists: [
-        BlockList(
-          id: 'social',
-          name: 'Social',
-          applicationCount: 1,
-          categoryCount: 0,
-          webDomainCount: 0,
-          updatedAt: DateTime.utc(2026, 1, 1),
+  test(
+    'a joined room that has not started waits on the same session',
+    () async {
+      final repository = MemoryFocusRepository(
+        lists: [
+          BlockList(
+            id: 'social',
+            name: 'Social',
+            applicationCount: 1,
+            categoryCount: 0,
+            webDomainCount: 0,
+            updatedAt: DateTime.utc(2026, 1, 1),
+          ),
+        ],
+      );
+      final container = ProviderContainer(
+        overrides: [
+          focusRepositoryProvider.overrideWithValue(repository),
+          focusShieldBridgeProvider.overrideWithValue(_ApprovingShield()),
+        ],
+      );
+      addTearDown(container.dispose);
+      final controller = container.read(focusControllerProvider.notifier);
+      const code = '0123456789abcdef0123456789abcdef';
+      final waiting = SharedSession(
+        id: 'room',
+        hostId: 'host',
+        hostName: 'Ada',
+        title: 'Study session',
+        labelEmoji: '🧠',
+        durationMinutes: 25,
+        status: SharedSessionStatus.waiting,
+        startedAt: null,
+        endsAt: null,
+        createdAt: DateTime(2026, 1, 1, 10),
+        expiresAt: DateTime.now().add(const Duration(hours: 2)),
+      );
+
+      expect(
+        await controller.holdJoinedSession(
+          listId: 'social',
+          shared: waiting,
+          inviteCode: code,
         ),
-      ],
-    );
-    final container = ProviderContainer(
-      overrides: [
-        focusRepositoryProvider.overrideWithValue(repository),
-        focusShieldBridgeProvider.overrideWithValue(_ApprovingShield()),
-      ],
-    );
-    addTearDown(container.dispose);
-    final controller = container.read(focusControllerProvider.notifier);
-    const code = '0123456789abcdef0123456789abcdef';
-    final waiting = SharedSession(
-      id: 'room',
-      hostId: 'host',
-      hostName: 'Ada',
-      title: 'Study session',
-      labelEmoji: '🧠',
-      durationMinutes: 25,
-      status: SharedSessionStatus.waiting,
-      startedAt: null,
-      endsAt: null,
-      createdAt: DateTime(2026, 1, 1, 10),
-      expiresAt: DateTime.now().add(const Duration(hours: 2)),
-    );
+        isTrue,
+      );
+      final held = container.read(focusControllerProvider);
+      expect(held.activeSession, isNull);
+      expect(held.foregroundSession?.outcome, SessionOutcome.created);
+      expect(held.foregroundSession?.sharedSessionId, 'room');
+      expect(held.foregroundSession?.sharedHost, isFalse);
+      expect(held.foregroundSession?.labelId, 'study-session');
+      expect(
+        held.sessions.single.endsAt!.difference(held.sessions.single.startedAt),
+        const Duration(minutes: 25),
+      );
+      expect(
+        await controller.startJoinedSession(
+          listId: 'social',
+          shared: waiting,
+          inviteCode: code,
+        ),
+        isFalse,
+      );
+      expect(
+        container.read(focusControllerProvider).sessions.single.outcome,
+        SessionOutcome.created,
+      );
 
-    expect(
-      await controller.holdJoinedSession(
-        listId: 'social',
-        shared: waiting,
-        inviteCode: code,
-      ),
-      isTrue,
-    );
-    final held = container.read(focusControllerProvider);
-    expect(held.activeSession, isNull);
-    expect(held.foregroundSession?.outcome, SessionOutcome.created);
-    expect(held.foregroundSession?.sharedSessionId, 'room');
-    expect(held.foregroundSession?.sharedHost, isFalse);
-    expect(held.foregroundSession?.labelId, 'study-session');
-    expect(
-      held.sessions.single.endsAt!.difference(held.sessions.single.startedAt),
-      const Duration(minutes: 25),
-    );
-    expect(
-      await controller.startJoinedSession(
-        listId: 'social',
-        shared: waiting,
-        inviteCode: code,
-      ),
-      isFalse,
-    );
-    expect(
-      container.read(focusControllerProvider).sessions.single.outcome,
-      SessionOutcome.created,
-    );
-
-    final endsAt = DateTime.now().add(const Duration(minutes: 20));
-    final running = SharedSession(
-      id: 'room',
-      hostId: 'host',
-      hostName: 'Ada',
-      title: 'Study session',
-      labelEmoji: '🧠',
-      durationMinutes: 25,
-      status: SharedSessionStatus.active,
-      startedAt: DateTime.now(),
-      endsAt: endsAt,
-      createdAt: waiting.createdAt,
-      expiresAt: endsAt,
-    );
-    expect(
-      await controller.startJoinedSession(
-        listId: 'social',
-        shared: running,
-        inviteCode: code,
-      ),
-      isTrue,
-    );
-    final started = container.read(focusControllerProvider);
-    expect(started.sessions, hasLength(1));
-    expect(started.sessions.single.id, held.sessions.single.id);
-    expect(started.activeSession?.endsAt, endsAt);
-    expect(started.activeSession?.sharedHost, isFalse);
-  });
+      final endsAt = DateTime.now().add(const Duration(minutes: 20));
+      final running = SharedSession(
+        id: 'room',
+        hostId: 'host',
+        hostName: 'Ada',
+        title: 'Study session',
+        labelEmoji: '🧠',
+        durationMinutes: 25,
+        status: SharedSessionStatus.active,
+        startedAt: DateTime.now(),
+        endsAt: endsAt,
+        createdAt: waiting.createdAt,
+        expiresAt: endsAt,
+      );
+      expect(
+        await controller.startJoinedSession(
+          listId: 'social',
+          shared: running,
+          inviteCode: code,
+        ),
+        isTrue,
+      );
+      final started = container.read(focusControllerProvider);
+      expect(started.sessions, hasLength(1));
+      expect(started.sessions.single.id, held.sessions.single.id);
+      expect(started.activeSession?.endsAt, endsAt);
+      expect(started.activeSession?.sharedHost, isFalse);
+    },
+  );
 
   test('a session keeps the label chosen up front', () async {
     final repository = MemoryFocusRepository(
@@ -866,10 +869,19 @@ void main() {
         .labels
         .firstWhere((label) => label.id == 'study-session');
 
-    await controller.createSession(listId: 'social', minutes: 25, label: study);
+    await controller.createSession(
+      listId: 'social',
+      minutes: 25,
+      label: study,
+      chatEnabled: true,
+    );
     expect(
       container.read(focusControllerProvider).sessions.single.labelId,
       'study-session',
+    );
+    expect(
+      container.read(focusControllerProvider).sessions.single.chatEnabled,
+      isTrue,
     );
     await controller.discardSession(
       container.read(focusControllerProvider).sessions.single.id,

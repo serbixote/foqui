@@ -24,6 +24,9 @@ class SharedSession {
     required this.endsAt,
     required this.createdAt,
     required this.expiresAt,
+    this.chatEnabled = false,
+    this.chatAt,
+    this.chatBy,
   });
 
   final String id;
@@ -37,6 +40,15 @@ class SharedSession {
   final DateTime? endsAt;
   final DateTime? createdAt;
   final DateTime expiresAt;
+
+  /// Whether people in this room can send messages.
+  final bool chatEnabled;
+
+  /// When the latest message was sent. Null until the first one.
+  final DateTime? chatAt;
+
+  /// Account that sent the latest message.
+  final String? chatBy;
 
   bool get isOver =>
       status == SharedSessionStatus.ended || !expiresAt.isAfter(DateTime.now());

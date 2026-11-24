@@ -12,13 +12,16 @@ import '../l10n/tr.dart';
 import '../models/block_list.dart';
 import '../models/focus_label.dart';
 import '../models/focus_session.dart';
+import '../models/session_chat.dart';
 import '../models/shared_session.dart';
 import '../models/user_profile.dart';
 import '../repositories/invite.dart';
 import '../screens/end_session_sheet.dart';
 import '../screens/screen_time_sheet.dart';
+import '../screens/session_chat_page.dart';
 import '../screens/shared_session_sheets.dart';
 import '../state/auth.dart';
+import '../state/chat_seen.dart';
 import '../services/focus_shield_bridge.dart';
 import '../state/focus_controller.dart';
 import '../state/profile.dart';
@@ -67,6 +70,9 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
   String? _publishedUsername;
   var _usernamePublishScheduled = false;
   String? _appliedGroupPause;
+  String? _chatSessionId;
+  var _chatOpen = false;
+  var _chatStarting = false;
 
   @override
   void initState() {
@@ -202,6 +208,69 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
       return;
     }
     setState(() {});
+  }
+
+  /// A chime only while this app is open and the chat page is closed.
+  /// The red dot uses the session document this sheet already watches.
+  void _onSharedChat(
+    AsyncValue<SharedSession?>? previous,
+    AsyncValue<SharedSession?> next,
+  ) {
+    final after = next.asData?.value;
+    final at = after?.chatAt;
+    final by = after?.chatBy;
+    if (after == null || at == null || by == null) return;
+    if (_chatOpen) {
+      ref.read(chatSeenProvider.notifier).mark(after.id, at);
+      return;
+    }
+    final resumed =
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+    if (!chatShouldChime(
+      previousReady: previous?.asData != null,
+      previousAt: previous?.asData?.value?.chatAt,
+      nextAt: at,
+      nextBy: by,
+      userId: ref.read(authProvider).userId ?? '',
+      chatVisible: false,
+      appResumed: resumed,
+    )) {
+      return;
+    }
+    unawaited(SystemSound.play(SystemSoundType.alert));
+  }
+
+  void _openChat(SharedSession? shared) {
+    final at = shared?.chatAt;
+    final id = shared?.id;
+    if (at != null && id != null) {
+      ref.read(chatSeenProvider.notifier).mark(id, at);
+    }
+    setState(() => _chatOpen = true);
+  }
+
+  void _closeChat() => setState(() => _chatOpen = false);
+
+  /// The chat is a real page, so the iOS edge swipe pops it.
+  void _onChatPageRemoved(Page<Object?> page) {
+    if (page.key != const ValueKey('session-chat') || !_chatOpen) return;
+    setState(() => _chatOpen = false);
+  }
+
+  Future<void> _startChat(SharedSession shared) async {
+    if (_chatStarting) return;
+    setState(() => _chatStarting = true);
+    try {
+      final enabled = await ref
+          .read(focusControllerProvider.notifier)
+          .enableSharedChat();
+      if (!mounted || !enabled) return;
+      _openChat(shared);
+    } catch (error, stack) {
+      debugPrint('Could not start the chat: $error\n$stack');
+    } finally {
+      if (mounted) setState(() => _chatStarting = false);
+    }
   }
 
   Future<void> _begin(FocusSession session) async {
@@ -410,6 +479,10 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
     final live = focus.foregroundSession;
     _track(live);
     final session = live ?? _held;
+    if (session?.id != _chatSessionId) {
+      _chatSessionId = session?.id;
+      _chatOpen = false;
+    }
     final labels = focus.labels;
     final waiting = session?.outcome == SessionOutcome.created;
     ref.listen(focusControllerProvider, (previous, next) {
@@ -437,6 +510,7 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
         unawaited(ref.read(focusControllerProvider.notifier).endFromShared());
       }
     });
+    ref.listen(sharedSessionProvider(sharedId), _onSharedChat);
     final members = ref.watch(participantsProvider(sharedId));
     final shared = ref.watch(sharedSessionProvider(sharedId)).asData?.value;
     final waitingForHost =
@@ -498,6 +572,16 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
       });
     }
 
+    final chatOn = session.chatEnabled || shared?.chatEnabled == true;
+    final showChat = _chatOpen;
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final unread = chatIsUnread(
+      chatAt: shared?.chatAt,
+      chatBy: shared?.chatBy,
+      userId: userId,
+      seenAt: ref.watch(chatSeenProvider)[sharedId],
+    );
+
     final sheet = Semantics(
       container: true,
       label: tr(
@@ -517,152 +601,244 @@ class _SessionLiveActivityState extends ConsumerState<SessionLiveActivity>
         clipBehavior: Clip.antiAlias,
         child: SafeArea(
           top: false,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 10),
-              const SheetGrabber(),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _BlockingCard(
-                      name: blockListTitle(
-                        id: session.blockListId,
-                        name: session.blockListName,
+          bottom: !showChat || keyboard == 0,
+          child: Padding(
+            padding: EdgeInsets.only(bottom: showChat ? keyboard : 0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 10),
+                const SheetGrabber(),
+                Expanded(
+                  child: Navigator(
+                    initialRoute: null,
+                    onGenerateInitialRoutes: (navigator, initialRoute) =>
+                        const <Route<dynamic>>[],
+                    onDidRemovePage: _onChatPageRemoved,
+                    pages: [
+                      CupertinoPage(
+                        key: const ValueKey('session'),
+                        child: ColoredBox(
+                          color: scheme.surface,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  18,
+                                  20,
+                                  0,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    _BlockingCard(
+                                      name: blockListTitle(
+                                        id: session.blockListId,
+                                        name: session.blockListName,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 22),
+                                    Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.center,
+                                      children: [
+                                        Expanded(
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: _ElapsedClock(
+                                              elapsed: _elapsed(
+                                                session,
+                                                shownAt,
+                                              ),
+                                              total: _total(session),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        _StatusLine(
+                                          label: session.outcomeLabel,
+                                          live: running,
+                                          pulse: _pulse,
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 14),
+                                    _LiveProgressBar(
+                                      value: progress,
+                                      slide: _slide,
+                                      color: FoquiColors.violet,
+                                      track: const Color(0xFF4A4A4E),
+                                    ),
+                                    const SizedBox(height: 22),
+                                    _SessionHeading(
+                                      labels: labels,
+                                      selected: _selectedLabel(session, labels),
+                                      onSelected: (index) {
+                                        if (index < 0 ||
+                                            index >= labels.length) {
+                                          return;
+                                        }
+                                        unawaited(
+                                          ref
+                                              .read(
+                                                focusControllerProvider
+                                                    .notifier,
+                                              )
+                                              .setSessionLabel(
+                                                sessionId: session.id,
+                                                label: labels[index],
+                                              ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
+                                child: ListView(
+                                  padding: const EdgeInsets.fromLTRB(
+                                    20,
+                                    22,
+                                    20,
+                                    20,
+                                  ),
+                                  children: [
+                                    _MemberList(
+                                      members: _membersFor(
+                                        session,
+                                        members,
+                                        userId: userId,
+                                        profile: profile,
+                                      ),
+                                      session: session,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  8,
+                                  20,
+                                  12,
+                                ),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (chatOn || shared != null) ...[
+                                      _ChatButton(
+                                        enabled: chatOn,
+                                        unread: unread,
+                                        busy: _chatStarting,
+                                        onPressed: chatOn
+                                            ? () => _openChat(shared)
+                                            : () => _startChat(shared!),
+                                      ),
+                                      const SizedBox(height: 12),
+                                    ],
+                                    AnimatedSize(
+                                      duration: kMotion,
+                                      curve: kMotionCurve,
+                                      alignment: Alignment.topCenter,
+                                      child: voteOpen
+                                          ? Padding(
+                                              padding: const EdgeInsets.only(
+                                                bottom: 12,
+                                              ),
+                                              child: _PauseVote(
+                                                request: request,
+                                                userId: userId,
+                                                busy: _busy,
+                                                onAccept: () =>
+                                                    _vote(accept: true),
+                                                onDecline: () =>
+                                                    _vote(accept: false),
+                                              ),
+                                            )
+                                          : const SizedBox(
+                                              width: double.infinity,
+                                            ),
+                                    ),
+                                    MotionSwap(
+                                      switchKey: waiting
+                                          ? 'waiting'
+                                          : 'running',
+                                      child: waiting
+                                          ? _WaitingActions(
+                                              busy: _busy,
+                                              canStart: !waitingForHost,
+                                              onStart: () => _begin(session),
+                                              onCancel: () => _cancel(session),
+                                            )
+                                          : _RunningActions(
+                                              busy: _busy,
+                                              pausing: _pausing,
+                                              paused: paused,
+                                              canPause:
+                                                  !voteOpen &&
+                                                  (paused ||
+                                                      canPauseSession(
+                                                        session,
+                                                        now,
+                                                      )),
+                                              pauseMessage: voteOpen
+                                                  ? tr('pause_request_waiting')
+                                                  : null,
+                                              onPause: () =>
+                                                  _pause(session, group: group),
+                                              onStop: group
+                                                  ? () => _leave(session)
+                                                  : _end,
+                                              stopLabel: group
+                                                  ? tr('session_leave')
+                                                  : tr('session_stop'),
+                                              stopTooltip:
+                                                  canStopSession(session, now)
+                                                  ? (group
+                                                        ? tr(
+                                                            'session_leave_action',
+                                                          )
+                                                        : tr('end_confirm'))
+                                                  : tr(
+                                                      'session_stop_wait',
+                                                      args: [
+                                                        '${minimumRecordedLength.inMinutes}',
+                                                      ],
+                                                    ),
+                                              stopIcon: group
+                                                  ? CupertinoIcons
+                                                        .person_crop_circle_badge_minus
+                                                  : CupertinoIcons.stop_fill,
+                                            ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 22),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            alignment: Alignment.centerLeft,
-                            child: _ElapsedClock(
-                              elapsed: _elapsed(session, shownAt),
-                              total: _total(session),
+                      if (_chatOpen)
+                        CupertinoPage(
+                          key: const ValueKey('session-chat'),
+                          child: ColoredBox(
+                            color: scheme.surface,
+                            child: SessionChatPage(
+                              sessionId: sharedId,
+                              onBack: _closeChat,
                             ),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        _StatusLine(
-                          label: session.outcomeLabel,
-                          live: running,
-                          pulse: _pulse,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    _LiveProgressBar(
-                      value: progress,
-                      slide: _slide,
-                      color: FoquiColors.violet,
-                      track: const Color(0xFF4A4A4E),
-                    ),
-                    const SizedBox(height: 22),
-                    _SessionHeading(
-                      labels: labels,
-                      selected: _selectedLabel(session, labels),
-                      onSelected: (index) {
-                        if (index < 0 || index >= labels.length) return;
-                        unawaited(
-                          ref
-                              .read(focusControllerProvider.notifier)
-                              .setSessionLabel(
-                                sessionId: session.id,
-                                label: labels[index],
-                              ),
-                        );
-                      },
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-                  children: [
-                    _MemberList(
-                      members: _membersFor(
-                        session,
-                        members,
-                        userId: userId,
-                        profile: profile,
-                      ),
-                      session: session,
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AnimatedSize(
-                      duration: kMotion,
-                      curve: kMotionCurve,
-                      alignment: Alignment.topCenter,
-                      child: voteOpen
-                          ? Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _PauseVote(
-                                request: request,
-                                userId: userId,
-                                busy: _busy,
-                                onAccept: () => _vote(accept: true),
-                                onDecline: () => _vote(accept: false),
-                              ),
-                            )
-                          : const SizedBox(width: double.infinity),
-                    ),
-                    MotionSwap(
-                      switchKey: waiting ? 'waiting' : 'running',
-                      child: waiting
-                          ? _WaitingActions(
-                              busy: _busy,
-                              canStart: !waitingForHost,
-                              onStart: () => _begin(session),
-                              onCancel: () => _cancel(session),
-                            )
-                          : _RunningActions(
-                              busy: _busy,
-                              pausing: _pausing,
-                              paused: paused,
-                              canPause:
-                                  !voteOpen &&
-                                  (paused || canPauseSession(session, now)),
-                              pauseMessage: voteOpen
-                                  ? tr('pause_request_waiting')
-                                  : null,
-                              onPause: () => _pause(session, group: group),
-                              onStop: group ? () => _leave(session) : _end,
-                              stopLabel: group
-                                  ? tr('session_leave')
-                                  : tr('session_stop'),
-                              stopTooltip: canStopSession(session, now)
-                                  ? (group
-                                        ? tr('session_leave_action')
-                                        : tr('end_confirm'))
-                                  : tr(
-                                      'session_stop_wait',
-                                      args: [
-                                        '${minimumRecordedLength.inMinutes}',
-                                      ],
-                                    ),
-                              stopIcon: group
-                                  ? CupertinoIcons
-                                        .person_crop_circle_badge_minus
-                                  : CupertinoIcons.stop_fill,
-                            ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1455,6 +1631,83 @@ String? _usernameFor(
   final own = profile?.username?.trim();
   if (own == null || own.isEmpty) return null;
   return own;
+}
+
+class _ChatButton extends StatelessWidget {
+  const _ChatButton({
+    required this.enabled,
+    required this.unread,
+    required this.busy,
+    required this.onPressed,
+  });
+
+  final bool enabled;
+  final bool unread;
+  final bool busy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final label = enabled ? tr('session_chat') : tr('session_chat_start');
+    return Tooltip(
+      message: unread ? tr('session_chat_unread') : label,
+      child: FilledButton.icon(
+        onPressed: busy ? null : onPressed,
+        style: FilledButton.styleFrom(
+          backgroundColor: FoquiColors.raised,
+          foregroundColor: scheme.onSurface,
+          disabledBackgroundColor: FoquiColors.raised,
+          disabledForegroundColor: scheme.onSurface.withValues(alpha: 0.4),
+          minimumSize: const Size.fromHeight(48),
+        ),
+        icon: busy
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.2,
+                  color: scheme.onSurface,
+                ),
+              )
+            : _ChatGlyph(unread: unread),
+        label: Text(label),
+      ),
+    );
+  }
+}
+
+class _ChatGlyph extends StatelessWidget {
+  const _ChatGlyph({required this.unread});
+
+  final bool unread;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 24,
+      height: 24,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          const Icon(CupertinoIcons.chat_bubble_fill, size: 20),
+          if (unread)
+            const Positioned(
+              right: -1,
+              top: -1,
+              child: DecoratedBox(
+                key: Key('chat-unread'),
+                decoration: BoxDecoration(
+                  color: FoquiColors.destructive,
+                  shape: BoxShape.circle,
+                ),
+                child: SizedBox(width: 8, height: 8),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ShareButton extends ConsumerStatefulWidget {

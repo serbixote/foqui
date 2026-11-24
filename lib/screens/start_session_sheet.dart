@@ -24,6 +24,7 @@ class StartSessionChoice {
     required this.minutes,
     required this.action,
     required this.label,
+    required this.chatEnabled,
   });
 
   final String listId;
@@ -35,6 +36,9 @@ class StartSessionChoice {
 
   /// Label this session is for. Chosen before the session is saved.
   final FocusLabel label;
+
+  /// Copied onto the shared room when this session is shared.
+  final bool chatEnabled;
 }
 
 enum _SheetPage { form, lists, labels }
@@ -67,6 +71,7 @@ class _StartSessionSheetState extends ConsumerState<StartSessionSheet> {
   var _durationChosen = false;
   String? _listId;
   String? _labelId;
+  var _chatEnabled = false;
   var _page = _SheetPage.form;
   var _forward = true;
 
@@ -161,6 +166,7 @@ class _StartSessionSheetState extends ConsumerState<StartSessionSheet> {
       minutes: minutes,
       action: action,
       label: label,
+      chatEnabled: _chatEnabled,
     );
   }
 
@@ -236,6 +242,11 @@ class _StartSessionSheetState extends ConsumerState<StartSessionSheet> {
           onPickCustom: () => _pickCustomDuration(minutes),
           onOpenLists: _openListPicker,
           onOpenLabels: _openLabelPicker,
+          chatEnabled: _chatEnabled,
+          onChatEnabled: (enabled) {
+            HapticFeedback.selectionClick();
+            setState(() => _chatEnabled = enabled);
+          },
           onStart: () => _submit(SessionSheetAction.start),
           onCreate: () => _submit(SessionSheetAction.create),
         );
@@ -441,6 +452,8 @@ class _SessionForm extends StatelessWidget {
     required this.onPickCustom,
     required this.onOpenLists,
     required this.onOpenLabels,
+    required this.chatEnabled,
+    required this.onChatEnabled,
     required this.onStart,
     required this.onCreate,
   });
@@ -452,6 +465,8 @@ class _SessionForm extends StatelessWidget {
   final VoidCallback onPickCustom;
   final VoidCallback onOpenLists;
   final VoidCallback onOpenLabels;
+  final bool chatEnabled;
+  final ValueChanged<bool> onChatEnabled;
   final VoidCallback? onStart;
   final VoidCallback? onCreate;
 
@@ -511,6 +526,8 @@ class _SessionForm extends StatelessWidget {
             muted: list == null,
             onTap: onOpenLists,
           ),
+          const SizedBox(height: 14),
+          _ChatSwitch(value: chatEnabled, onChanged: onChatEnabled),
           const SizedBox(height: 28),
           FilledButton(
             onPressed: onStart,
@@ -602,6 +619,58 @@ class _ChoiceRow extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatSwitch extends StatelessWidget {
+  const _ChatSwitch({required this.value, required this.onChanged});
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Material(
+      color: scheme.surfaceContainerHighest,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    tr('session_chat'),
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    tr('session_chat_switch_body'),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                      height: 1.3,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            CupertinoSwitch(
+              value: value,
+              activeTrackColor: scheme.primary,
+              onChanged: onChanged,
+            ),
+          ],
         ),
       ),
     );

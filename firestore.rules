@@ -163,6 +163,68 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/sessions/$(sessionId)/participants/$(request.auth.uid));
     }
 
+    function validChatMessage(message) {
+      return message is map
+        && message.keys().hasOnly(['id', 'uid', 'name', 'text', 'at'])
+        && message.id is string
+        && message.id.size() >= 8
+        && message.id.size() <= 40
+        && message.uid == request.auth.uid
+        && matchesAlias(message.name)
+        && message.text is string
+        && message.text.size() > 0
+        && message.text.size() <= 200
+        && message.at is timestamp
+        && message.at > request.time - duration.value(5, 'm')
+        && message.at < request.time + duration.value(2, 'm');
+    }
+
+    function sessionAllowsChat(sessionId) {
+      let session = get(sessionPath(sessionId)).data;
+      return session.get('chatEnabled', false) == true
+        && session.status != 'ended';
+    }
+
+    // One new message, or a roll from 200 down to the latest 200.
+    function chatHistoryHolds() {
+      let next = request.resource.data.messages;
+      let prev = resource.data.messages;
+      return next is list
+        && prev is list
+        && next.size() >= 1
+        && next.size() <= 200
+        && validChatMessage(next[next.size() - 1])
+        && (
+          (
+            next.size() == prev.size() + 1
+            && next.hasAll(prev)
+          )
+          || (
+            prev.size() >= 200
+            && next.size() == 200
+          )
+        );
+    }
+
+    function memberEnablesChat(sessionId) {
+      return isSessionMember(sessionId)
+        && resource.data.status != 'ended'
+        && resource.data.get('chatEnabled', false) == false
+        && request.resource.data.chatEnabled == true
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['chatEnabled']);
+    }
+
+    function memberChatSignal(sessionId) {
+      return isSessionMember(sessionId)
+        && resource.data.get('chatEnabled', false) == true
+        && resource.data.status != 'ended'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['chatAt', 'chatBy'])
+        && request.resource.data.chatBy == request.auth.uid
+        && request.resource.data.chatAt == request.time;
+    }
+
     function validExpiry(value) {
       return value is timestamp
         && value > request.time
@@ -211,7 +273,8 @@ service cloud.firestore {
           'startedAt',
           'endsAt',
           'createdAt',
-          'expiresAt'
+          'expiresAt',
+          'chatEnabled'
         ])
         && request.resource.data.hostId == request.auth.uid
         && matchesAlias(request.resource.data.hostName)
@@ -222,9 +285,11 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && validStarted(request.resource.data.startedAt)
         && validEnds(request.resource.data.endsAt)
-        && validExpiry(request.resource.data.expiresAt);
+        && validExpiry(request.resource.data.expiresAt)
+        && (!('chatEnabled' in request.resource.data)
+          || request.resource.data.chatEnabled is bool);
 
-      allow update: if isSessionHost(sessionId)
+      allow update: if (isSessionHost(sessionId)
         && request.resource.data.hostId == resource.data.hostId
         && request.resource.data.hostName == resource.data.hostName
         && request.resource.data.title == resource.data.title
@@ -242,7 +307,8 @@ service cloud.firestore {
         && (request.resource.data.expiresAt == resource.data.expiresAt
           || validExpiry(request.resource.data.expiresAt))
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'startedAt', 'endsAt', 'expiresAt']);
+          .hasOnly(['status', 'startedAt', 'endsAt', 'expiresAt'])
+      ) || memberEnablesChat(sessionId) || memberChatSignal(sessionId);
 
       allow delete: if false;
 
@@ -305,6 +371,28 @@ service cloud.firestore {
           && request.resource.data.accepted[request.auth.uid] == true;
 
         allow delete: if requestId == 'current' && isSessionMember(sessionId);
+      }
+
+      match /chat/{chatId} {
+        allow get: if chatId == 'room'
+          && (isSessionHost(sessionId) || isSessionMember(sessionId));
+        allow list: if false;
+
+        allow create: if chatId == 'room'
+          && isSessionMember(sessionId)
+          && sessionAllowsChat(sessionId)
+          && request.resource.data.keys().hasOnly(['messages'])
+          && request.resource.data.messages is list
+          && request.resource.data.messages.size() == 1
+          && validChatMessage(request.resource.data.messages[0]);
+
+        allow update: if chatId == 'room'
+          && isSessionMember(sessionId)
+          && sessionAllowsChat(sessionId)
+          && request.resource.data.keys().hasOnly(['messages'])
+          && chatHistoryHolds();
+
+        allow delete: if false;
       }
     }
 

@@ -563,6 +563,7 @@ class FocusController extends Notifier<FocusState> {
     required String listId,
     int? minutes,
     FocusLabel? label,
+    bool chatEnabled = false,
   }) async {
     final list = _listById(listId);
     if (list == null || list.isEmpty) {
@@ -585,6 +586,7 @@ class FocusController extends Notifier<FocusState> {
           endsAt: endsAt,
           outcome: SessionOutcome.created,
           labelId: label?.id,
+          chatEnabled: chatEnabled,
         ),
       ),
     ]);
@@ -597,6 +599,7 @@ class FocusController extends Notifier<FocusState> {
     int? minutes,
     String? sessionId,
     FocusLabel? label,
+    bool chatEnabled = false,
   }) async {
     if (sessionId != null) {
       await _startCreated(sessionId);
@@ -629,6 +632,7 @@ class FocusController extends Notifier<FocusState> {
           endsAt: endsAt,
           outcome: SessionOutcome.active,
           labelId: label?.id,
+          chatEnabled: chatEnabled,
         ),
       ),
     ]);
@@ -795,6 +799,7 @@ class FocusController extends Notifier<FocusState> {
       startedAt: startedAt,
       endsAt: endsAt,
       expiresAt: sharedExpiry(now: now, status: status, endsAt: endsAt),
+      chatEnabled: session.chatEnabled,
     );
 
     final sessions = [
@@ -811,6 +816,43 @@ class FocusController extends Notifier<FocusState> {
     state = state.copyWith(sessions: sessions);
     await ref.read(focusRepositoryProvider).writeSessions(sessions);
     return created.url;
+  }
+
+  /// Lets the people in the current room send messages.
+  Future<bool> enableSharedChat() async {
+    final sharedId = state.foregroundSession?.sharedSessionId;
+    if (sharedId == null || Firebase.apps.isEmpty) return false;
+    final repository = ref.read(inviteRepositoryProvider);
+    if (repository == null) return false;
+    await repository.enableChat(sharedId);
+    return true;
+  }
+
+  /// Sends [text] as this account. False when there is no room or no alias.
+  ///
+  /// A session with chat on and no room yet gets one on the first message,
+  /// so the host can write before anyone else has joined.
+  Future<bool> sendSharedChat(String text, {String? id, DateTime? at}) async {
+    var sharedId = state.foregroundSession?.sharedSessionId;
+    if (sharedId == null) {
+      final session = state.foregroundSession;
+      if (session == null || !session.chatEnabled) return false;
+      if (await shareLink(session.id) == null) return false;
+      sharedId = state.foregroundSession?.sharedSessionId;
+    }
+    if (sharedId == null || Firebase.apps.isEmpty) return false;
+    final alias = ref.read(userProfileProvider).asData?.value.alias;
+    if (alias == null || alias.trim().isEmpty) return false;
+    final repository = ref.read(inviteRepositoryProvider);
+    if (repository == null) return false;
+    await repository.sendMessage(
+      sessionId: sharedId,
+      name: alias,
+      text: text,
+      id: id,
+      at: at,
+    );
+    return true;
   }
 
   /// Puts a joined room on screen before the host has started it.

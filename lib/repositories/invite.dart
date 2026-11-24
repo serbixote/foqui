@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
 
+import '../models/session_chat.dart';
 import '../models/shared_session.dart';
 import '../state/auth.dart';
 import 'repository.dart';
@@ -33,6 +34,17 @@ final participantsProvider =
         return const Stream<List<SessionParticipant>>.empty();
       }
       return repository.watchParticipants(sessionId);
+    });
+
+/// Messages for one room. Watched only while the chat page is open, so a
+/// closed chat does not read this document.
+final sessionChatProvider = StreamProvider.autoDispose
+    .family<List<SessionChatMessage>, String>((ref, sessionId) {
+      final repository = ref.watch(inviteRepositoryProvider);
+      if (repository == null || sessionId.isEmpty) {
+        return Stream.value(const <SessionChatMessage>[]);
+      }
+      return repository.watchChat(sessionId);
     });
 
 final pauseRequestProvider = StreamProvider.family<PauseRequest?, String>((
@@ -70,6 +82,7 @@ class InviteRepository extends Repository {
     required DateTime? startedAt,
     required DateTime? endsAt,
     required DateTime expiresAt,
+    required bool chatEnabled,
   }) async {
     final sessionId = _uuid.v4().replaceAll('-', '');
     final code = _uuid.v4().replaceAll('-', '');
@@ -88,6 +101,7 @@ class InviteRepository extends Repository {
       'endsAt': _time(endsAt),
       'createdAt': FieldValue.serverTimestamp(),
       'expiresAt': Timestamp.fromDate(expiresAt),
+      'chatEnabled': chatEnabled,
     });
     batch.set(invite, {
       'sessionId': sessionId,
@@ -185,6 +199,63 @@ class InviteRepository extends Repository {
   Future<void> markEnded(String sessionId) {
     return _session(sessionId)
         .update({'status': SharedSessionStatus.ended.name});
+  }
+
+  DocumentReference<Map<String, dynamic>> _chat(String sessionId) {
+    return _session(sessionId).collection(chatCollection).doc(chatRoomId);
+  }
+
+  /// Turns messaging on for a room that was created without it.
+  Future<void> enableChat(String sessionId) {
+    return _session(sessionId).update({'chatEnabled': true});
+  }
+
+  Stream<List<SessionChatMessage>> watchChat(String sessionId) {
+    return _chat(sessionId).snapshots().map((snapshot) {
+      if (!snapshot.exists) return const <SessionChatMessage>[];
+      return _messagesFrom(snapshot.data()?['messages']);
+    });
+  }
+
+  /// Appends one message and keeps the latest [maxChatMessages].
+  ///
+  /// Existing entries are written back unchanged so the document stays one
+  /// read for everyone who has the chat open. The latest-message time and
+  /// author land on the session document, which the sheet already listens to.
+  Future<void> sendMessage({
+    required String sessionId,
+    required String name,
+    required String text,
+    String? id,
+    DateTime? at,
+  }) async {
+    final message = chatMessageText(text);
+    if (message == null) return;
+    final room = _chat(sessionId);
+    final session = _session(sessionId);
+    final messageId = id ?? _uuid.v4().replaceAll('-', '');
+    final sentAt = at ?? DateTime.now();
+    await firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(room);
+      final current = snapshot.exists
+          ? _messageMaps(snapshot.data()?['messages'])
+          : <Map<String, dynamic>>[];
+      current.add({
+        'id': messageId,
+        'uid': userId,
+        'name': name,
+        'text': message,
+        'at': Timestamp.fromDate(sentAt),
+      });
+      if (current.length > maxChatMessages) {
+        current.removeRange(0, current.length - maxChatMessages);
+      }
+      transaction.set(room, {'messages': current});
+      transaction.update(session, {
+        'chatAt': FieldValue.serverTimestamp(),
+        'chatBy': userId,
+      });
+    });
   }
 
   DocumentReference<Map<String, dynamic>> _pauseRequest(String sessionId) {
@@ -287,6 +358,11 @@ SharedSession _sessionFrom(String id, Map<String, dynamic> data) {
     endsAt: _readTime(data['endsAt']),
     createdAt: _readTime(data['createdAt']),
     expiresAt: expiresAt ?? DateTime.fromMillisecondsSinceEpoch(0),
+    chatEnabled: data['chatEnabled'] == true,
+    chatAt: _readTime(data['chatAt']),
+    chatBy: data['chatBy'] is String && (data['chatBy'] as String).isNotEmpty
+        ? data['chatBy'] as String
+        : null,
   );
 }
 
@@ -314,6 +390,38 @@ SessionParticipant _participantFrom(String id, Map<String, dynamic> data) {
     joinedAt: _readTime(data['joinedAt']),
     username: username is String && username.isNotEmpty ? username : null,
   );
+}
+
+List<SessionChatMessage> _messagesFrom(Object? raw) {
+  if (raw is! List) return const [];
+  final messages = <SessionChatMessage>[];
+  for (final item in raw) {
+    if (item is! Map) continue;
+    final id = item['id'];
+    final uid = item['uid'];
+    final name = item['name'];
+    final text = item['text'];
+    final at = _readTime(item['at']);
+    if (id is! String ||
+        uid is! String ||
+        name is! String ||
+        text is! String ||
+        at == null) {
+      continue;
+    }
+    messages.add(
+      SessionChatMessage(id: id, uid: uid, name: name, text: text, at: at),
+    );
+  }
+  return messages;
+}
+
+List<Map<String, dynamic>> _messageMaps(Object? raw) {
+  if (raw is! List) return [];
+  return [
+    for (final item in raw)
+      if (item is Map) Map<String, dynamic>.from(item),
+  ];
 }
 
 PauseRequest _pauseRequestFrom(Map<String, dynamic> data) {

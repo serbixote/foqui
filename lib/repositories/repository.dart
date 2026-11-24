@@ -13,3 +13,5 @@ const invitationsCollection = 'invitations';
 const participantsCollection = 'participants';
 const pauseRequestCollection = 'pauseRequest';
 const currentPauseRequestId = 'current';
+const chatCollection = 'chat';
+const chatRoomId = 'room';

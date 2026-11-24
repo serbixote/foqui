@@ -118,6 +118,12 @@ void main() {
     expect(restored.sharedSessionId, 'room');
     expect(restored.inviteCode, session.inviteCode);
     expect(restored.sharedHost, isTrue);
+    expect(restored.chatEnabled, isFalse);
+    expect(
+      FocusSession.fromJson(session.copyWith(chatEnabled: true).toJson())
+          .chatEnabled,
+      isTrue,
+    );
     expect(sharedDurationMinutes(session), 25);
     expect(sharedTitleOf(null, fallback: 'Focus'), 'Focus');
     expect(sharedTitleOf('Deep work', fallback: 'Focus'), 'Deep work');

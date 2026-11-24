@@ -18,6 +18,7 @@ class FocusSession {
     this.sharedSessionId,
     this.inviteCode,
     this.sharedHost = false,
+    this.chatEnabled = false,
   });
 
   final String id;
@@ -44,6 +45,9 @@ class FocusSession {
 
   /// True on the phone that created the shared room.
   final bool sharedHost;
+
+  /// Chosen on the new-session sheet. Copied onto the room when it is shared.
+  final bool chatEnabled;
 
   bool get hasLabel => labelId != null;
 
@@ -86,6 +90,7 @@ class FocusSession {
     String? sharedSessionId,
     String? inviteCode,
     bool? sharedHost,
+    bool? chatEnabled,
   }) {
     return FocusSession(
       id: id,
@@ -102,6 +107,7 @@ class FocusSession {
       sharedSessionId: sharedSessionId ?? this.sharedSessionId,
       inviteCode: inviteCode ?? this.inviteCode,
       sharedHost: sharedHost ?? this.sharedHost,
+      chatEnabled: chatEnabled ?? this.chatEnabled,
     );
   }
 
@@ -119,6 +125,7 @@ class FocusSession {
       'sharedSessionId': sharedSessionId,
       'inviteCode': inviteCode,
       'sharedHost': sharedHost,
+      'chatEnabled': chatEnabled,
     };
   }
 
@@ -142,6 +149,7 @@ class FocusSession {
       sharedSessionId: json['sharedSessionId'] as String?,
       inviteCode: json['inviteCode'] as String?,
       sharedHost: json['sharedHost'] == true,
+      chatEnabled: json['chatEnabled'] == true,
     );
   }
 }

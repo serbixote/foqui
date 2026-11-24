@@ -193,12 +193,14 @@ Future<void> beginFocusSession(
         listId: choice.listId,
         minutes: choice.minutes,
         label: choice.label,
+        chatEnabled: choice.chatEnabled,
       );
     } else {
       await controller.startSession(
         listId: choice.listId,
         minutes: choice.minutes,
         label: choice.label,
+        chatEnabled: choice.chatEnabled,
       );
     }
     HapticFeedback.mediumImpact();
