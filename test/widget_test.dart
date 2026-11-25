@@ -644,6 +644,72 @@ void main() {
     expect(find.text('📖 Reading'), findsNothing);
   });
 
+  testWidgets(
+    'load more sits at the end of recent sessions and scrolls with it',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(390, 844));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final base = DateTime.utc(2026, 11, 1, 9);
+      final sessions = [
+        for (var i = 0; i < 12; i++)
+          FocusSession(
+            id: 'session-$i',
+            blockListId: 'list-$i',
+            blockListName: 'List $i',
+            startedAt: base.add(Duration(hours: i)),
+            stoppedAt: base.add(Duration(hours: i, minutes: 25)),
+            outcome: SessionOutcome.completed,
+          ),
+      ];
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authProvider.overrideWith(LoggedInAuthNotifier.new),
+            focusRepositoryProvider.overrideWithValue(
+              MemoryFocusRepository(sessions: sessions),
+            ),
+          ],
+          child: const FoquiApp(),
+        ),
+      );
+      await settleApp(tester);
+
+      final list = find.descendant(
+        of: find.byType(HomeScreen),
+        matching: find.byType(ListView),
+      );
+      final group = find.descendant(
+        of: list,
+        matching: find.byType(SurfaceGroup),
+      );
+      final loadMore = find.descendant(
+        of: group,
+        matching: find.text('Load more'),
+      );
+
+      expect(loadMore, findsOneWidget);
+      expect(find.text('List 0'), findsNothing);
+
+      final beforeScroll = tester.getTopLeft(loadMore).dy;
+      await tester.drag(list, const Offset(0, -180));
+      await tester.pump();
+      final afterScroll = tester.getTopLeft(loadMore).dy;
+      expect(afterScroll, lessThan(beforeScroll));
+
+      await tester.ensureVisible(loadMore);
+      await tester.pump();
+      await tester.tap(loadMore);
+      await tester.pump();
+
+      expect(find.text('Load more'), findsNothing);
+      await tester.drag(list, const Offset(0, -400));
+      await tester.pump();
+      expect(find.text('List 0'), findsOneWidget);
+    },
+  );
+
   testWidgets('deleting a label explains that its time stays as Focus Time', (
     tester,
   ) async {

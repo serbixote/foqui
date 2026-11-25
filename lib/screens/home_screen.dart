@@ -143,73 +143,55 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
     return SafeArea(
       bottom: false,
-      child: Column(
-        children: [
-          Expanded(
-            child: MotionSwap(
-              expand: true,
-              switchKey: past.isEmpty,
-              child: past.isEmpty
-                  ? CustomScrollView(
-                      slivers: [
-                        SliverPadding(
-                          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                          sliver: SliverToBoxAdapter(child: chrome),
+      child: MotionSwap(
+        expand: true,
+        switchKey: past.isEmpty,
+        child: past.isEmpty
+            ? CustomScrollView(
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                    sliver: SliverToBoxAdapter(child: chrome),
+                  ),
+                  SliverFillRemaining(
+                    hasScrollBody: false,
+                    child: Padding(
+                      padding: kEmptyContentPadding,
+                      child: Align(
+                        alignment: kEmptyContentAlignment,
+                        child: _HomeEmpty(
+                          busy: _starting,
+                          onStart: _startSession,
                         ),
-                        SliverFillRemaining(
-                          hasScrollBody: false,
-                          child: Padding(
-                            padding: kEmptyContentPadding,
-                            child: Align(
-                              alignment: kEmptyContentAlignment,
-                              child: _HomeEmpty(
-                                busy: _starting,
-                                onStart: _startSession,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : ListView(
-                      padding: EdgeInsets.fromLTRB(
-                        20,
-                        16,
-                        20,
-                        hasMore ? 12 : kFloatingContentInset,
                       ),
-                      children: [
-                        chrome,
-                        const SizedBox(height: 16),
-                        _SectionHeader(title: tr('home_recent')),
-                        const SizedBox(height: 10),
-                        SurfaceGroup(
-                          children: [
-                            for (final session in shown)
-                              _HistoryTile(
-                                session: session,
-                                labels: state.labels,
-                              ),
-                          ],
-                        ),
-                      ],
                     ),
-            ),
-          ),
-          if (hasMore)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                0,
-                20,
-                kFloatingBarBottomGap + kFloatingTabBarHeight + 12,
+                  ),
+                ],
+              )
+            : ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  20,
+                  16,
+                  20,
+                  kFloatingContentInset,
+                ),
+                children: [
+                  chrome,
+                  const SizedBox(height: 16),
+                  _SectionHeader(title: tr('home_recent')),
+                  const SizedBox(height: 10),
+                  SurfaceGroup(
+                    children: [
+                      for (final session in shown)
+                        _HistoryTile(session: session, labels: state.labels),
+                      if (hasMore)
+                        _LoadMoreTile(
+                          onTap: () => setState(() => _shown += _pageSize),
+                        ),
+                    ],
+                  ),
+                ],
               ),
-              child: TextButton(
-                onPressed: () => setState(() => _shown += _pageSize),
-                child: Text(tr('home_load_more')),
-              ),
-            ),
-        ],
       ),
     );
   }
@@ -512,6 +494,35 @@ class _HistoryTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LoadMoreTile extends StatelessWidget {
+  const _LoadMoreTile({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Semantics(
+      button: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Center(
+            child: Text(
+              tr('home_load_more'),
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
