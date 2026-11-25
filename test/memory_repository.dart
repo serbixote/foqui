@@ -8,6 +8,7 @@ class MemoryFocusRepository extends FocusRepository {
     List<BlockList> lists = const [],
     List<FocusSession> sessions = const [],
     List<FocusLabel> labels = const [],
+    this.loaded = true,
   }) : lists = List.of(lists),
        sessions = List.of(sessions),
        labels = List.of(labels);
@@ -15,6 +16,11 @@ class MemoryFocusRepository extends FocusRepository {
   List<BlockList> lists;
   List<FocusSession> sessions;
   List<FocusLabel> labels;
+
+  final bool loaded;
+
+  @override
+  bool get hasLoaded => loaded;
 
   @override
   List<BlockList> readLists() => List.unmodifiable(lists);

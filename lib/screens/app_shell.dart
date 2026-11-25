@@ -8,6 +8,7 @@ import '../widgets/session_live_activity.dart';
 import 'block_lists_screen.dart';
 import 'friends_screen.dart';
 import 'home_screen.dart';
+import 'sign_in_screen.dart';
 import 'stats_screen.dart';
 
 class AppShell extends ConsumerStatefulWidget {
@@ -22,7 +23,13 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
-    final session = ref.watch(focusControllerProvider).foregroundSession;
+    final focus = ref.watch(focusControllerProvider);
+    // The first frame has no sessions yet, same as a real empty history.
+    // Hold the startup spinner until the account's sessions have arrived.
+    if (!ref.watch(focusRepositoryProvider).hasLoaded) {
+      return const AuthLoadingScreen();
+    }
+    final session = focus.foregroundSession;
     final locked = session != null;
     if (locked) _index = 0;
 

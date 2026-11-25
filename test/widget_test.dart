@@ -56,6 +56,30 @@ void main() {
     await loadEnglishCatalog();
   });
 
+  testWidgets('home stays on the loading screen until focus data arrives', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(390, 844));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authProvider.overrideWith(LoggedInAuthNotifier.new),
+          focusRepositoryProvider.overrideWithValue(
+            MemoryFocusRepository(loaded: false),
+          ),
+        ],
+        child: const FoquiApp(),
+      ),
+    );
+    await settleApp(tester);
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('No sessions yet'), findsNothing);
+    expect(find.byType(HomeScreen), findsNothing);
+  });
+
   testWidgets('starting a session asks for duration and a block list', (
     tester,
   ) async {
