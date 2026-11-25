@@ -3,7 +3,10 @@
     "rules": "firestore.rules"
   },
   "hosting": {
-    "public": "hosting/public",
+    "public": "web/dist",
+    "predeploy": [
+      "npm --prefix web ci && npm --prefix web run build"
+    ],
     "ignore": [
       "firebase.json",
       "**/node_modules/**"

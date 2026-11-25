@@ -49,3 +49,8 @@ app.*.map.json
 
 # Firebase related
 .firebase/
+
+# Astro landing page
+web/node_modules/
+web/dist/
+web/.astro/

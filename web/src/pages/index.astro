@@ -1,0 +1,250 @@
+---
+import Base from "../layouts/Base.astro";
+import Footer from "../components/Footer.astro";
+
+const description =
+  "Focus sessions that block the apps you choose. Study, deep work, family time, or a digital detox — on your own, or with the people you invite.";
+
+const scenes = [
+  {
+    label: "Study session",
+    image: "/images/foqui-study.webp",
+    text: "Books, notes, and the apps you put away.",
+  },
+  {
+    label: "Deep work",
+    image: "/images/foqui-deep-work.webp",
+    text: "A timer that holds, even after you leave Foqui.",
+  },
+  {
+    label: "Couple time",
+    image: "/images/foqui-couple.webp",
+    text: "Share the session. Each of you blocks what you need to.",
+  },
+  {
+    label: "Family time",
+    image: "/images/foqui-family.webp",
+    text: "One invitation. Everyone joins with their own list.",
+  },
+];
+
+const lengths = ["Until I end it", "15 min", "25 min", "45 min", "60 min", "90 min"];
+
+const labels = [
+  "🎯 Focus Time",
+  "📚 Study session",
+  "🧠 Deep work",
+  "💛 Couple time",
+  "🏡 Family time",
+  "🌿 Digital detox",
+];
+---
+
+<Base title="Foqui" description={description}>
+  <main id="content">
+    <div class="welcome">
+    <header class="nav">
+      <a class="brand" href="/">
+        <img src="/images/foqui.webp" alt="" width="1200" height="900" />
+        Foqui
+      </a>
+      <nav aria-label="Page">
+        <div class="nav-links">
+          <a href="#session">Session</a>
+          <a href="#together">Together</a>
+          <a href="#labels">Labels</a>
+        </div>
+      </nav>
+    </header>
+
+    <div class="hero">
+      <div>
+        <h1>Foqui</h1>
+        <p class="sr-only" data-live aria-live="polite">
+          blocks distracting apps during your Study session
+        </p>
+        <div aria-hidden="true">
+          <p class="hero-lead">blocks distracting apps during your</p>
+          <p class="rotator-label" data-label>{scenes[0].label}</p>
+        </div>
+      </div>
+
+      <div class="rotator-art" aria-hidden="true">
+        <img
+          class="scene-art"
+          data-art
+          src={scenes[0].image}
+          alt=""
+          width="1200"
+          height="900"
+        />
+      </div>
+
+      <div class="hero-action">
+        <a class="button" href="#session">How a session works</a>
+      </div>
+    </div>
+    </div>
+
+  <section class="section" id="session">
+    <div class="wrap">
+      <h2>Put chosen apps away for a while.</h2>
+      <p class="lede">
+        You create a session, choose the apps you want to block, and press start.
+      </p>
+      <ol class="steps narrow">
+        <li>
+          <span class="step-index">1</span>
+          <div>
+            <h3>Choose a block list</h3>
+            <p>
+              A block list is the apps, categories, and websites Foqui shields.
+              Nothing is blocked until you start.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step-index">2</span>
+          <div>
+            <h3>Pick a length</h3>
+            <p>From 15 minutes to 3 hours, or until you end it.</p>
+            <ul class="presets">
+              {lengths.map((length) => <li>{length}</li>)}
+            </ul>
+          </div>
+        </li>
+        <li>
+          <span class="step-index">3</span>
+          <div>
+            <h3>Press start</h3>
+            <p>
+              Opening a blocked app shows Foqui, with the time that app comes
+              back. The shield stays up after you leave.
+            </p>
+          </div>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="section follow" id="for">
+    <div class="wrap">
+      <h2>Study, deep work, time together</h2>
+      <p class="lede">
+        It’s for study sessions, deep work, family time, couple time, even a
+        digital detox.
+      </p>
+      <ul class="scene-grid">
+        {
+          scenes.map((scene) => (
+            <li class="scene-card">
+              <img src={scene.image} alt="" width="1200" height="900" />
+              <h3>{scene.label}</h3>
+              <p>{scene.text}</p>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+  </section>
+
+  <section class="section follow" id="together">
+    <div class="wrap">
+      <div class="together">
+        <div>
+          <h2>Share the session</h2>
+          <p class="lede">
+            Friends and family join from a link. Each person brings their own
+            block list.
+          </p>
+          <ul class="points">
+            <li>You can chat with the people in the session.</li>
+            <li>A pause waits until everyone accepts.</li>
+            <li>If you leave, everyone else keeps going.</li>
+          </ul>
+        </div>
+        <img
+          src="/images/foqui-family.webp"
+          alt=""
+          width="1200"
+          height="900"
+        />
+      </div>
+    </div>
+  </section>
+
+  <section class="section follow" id="labels">
+    <div class="wrap">
+      <h2>A name for the time</h2>
+      <p class="lede">
+        A label is the name a session wears. Pick one before you start, and
+        Foqui groups your history and stats by it — today, this week, your
+        streak, and how long you stayed.
+      </p>
+      <ul class="labels" aria-label="Labels">
+        {labels.map((label) => <li>{label}</li>)}
+      </ul>
+      <div class="note narrow">
+        <ul class="points">
+          <li>Apps on your block list stay shielded until the timer ends.</li>
+          <li>On iPhone, Screen Time is only used for the lists you choose.</li>
+          <li>
+            On Android, Foqui only checks which app is open. It does not read
+            what’s on screen.
+          </li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <Footer />
+  </main>
+  <script define:vars={{ scenes: scenes.map((scene) => ({ label: scene.label, image: scene.image })) }}>
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const label = document.querySelector("[data-label]");
+  const art = document.querySelector("[data-art]");
+  const live = document.querySelector("[data-live]");
+
+  if (!reduce && label && art && scenes.length > 1) {
+    let index = 0;
+    let timer = 0;
+    let swapTimer = 0;
+
+    const tick = () => {
+      label.classList.add("is-out");
+      art.classList.add("is-out");
+      window.clearTimeout(swapTimer);
+      swapTimer = window.setTimeout(() => {
+        index = (index + 1) % scenes.length;
+        const scene = scenes[index];
+        label.textContent = scene.label;
+        art.setAttribute("src", scene.image);
+        if (live) {
+          live.textContent = `blocks distracting apps during your ${scene.label}`;
+        }
+        label.classList.remove("is-out");
+        art.classList.remove("is-out");
+      }, 160);
+    };
+
+    const arm = (delay) => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        tick();
+        arm(1600);
+      }, delay);
+    };
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        window.clearTimeout(timer);
+        window.clearTimeout(swapTimer);
+      } else {
+        arm(1600);
+      }
+    });
+
+    arm(700);
+  }
+</script>
+</Base>
