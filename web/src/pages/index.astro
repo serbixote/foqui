@@ -3,248 +3,300 @@ import Base from "../layouts/Base.astro";
 import Footer from "../components/Footer.astro";
 
 const description =
-  "Focus sessions that block the apps you choose. Study, deep work, family time, or a digital detox — on your own, or with the people you invite.";
+  "Foqui is an app blocker for study sessions, deep work, and family time. Block distracting apps on your own, or share a link so others join the same session.";
 
-const scenes = [
-  {
-    label: "Study session",
-    image: "/images/foqui-study.webp",
-    text: "Books, notes, and the apps you put away.",
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  name: "Foqui",
+  applicationCategory: "UtilitiesApplication",
+  operatingSystem: "iOS, Android",
+  description,
+  url: new URL("/", Astro.site).href,
+  image: new URL("/og.jpg", Astro.site).href,
+  publisher: {
+    "@type": "Organization",
+    name: "The Boring Builders",
   },
-  {
-    label: "Deep work",
-    image: "/images/foqui-deep-work.webp",
-    text: "A timer that holds, even after you leave Foqui.",
-  },
-  {
-    label: "Couple time",
-    image: "/images/foqui-couple.webp",
-    text: "Share the session. Each of you blocks what you need to.",
-  },
-  {
-    label: "Family time",
-    image: "/images/foqui-family.webp",
-    text: "One invitation. Everyone joins with their own list.",
-  },
-];
+};
 
-const lengths = ["Until I end it", "15 min", "25 min", "45 min", "60 min", "90 min"];
-
-const labels = [
-  "🎯 Focus Time",
-  "📚 Study session",
-  "🧠 Deep work",
-  "💛 Couple time",
-  "🏡 Family time",
-  "🌿 Digital detox",
-];
+const appStoreUrl = "https://apps.apple.com/app/foqui";
+const playStoreUrl =
+  "https://play.google.com/store/apps/details?id=foqui.theboringbuilders.xyz";
 ---
 
-<Base title="Foqui" description={description}>
+<Base
+  title="Foqui — App blocker for study, deep work, and family time"
+  description={description}
+  jsonLd={jsonLd}
+>
+  <header class="nav">
+    <a class="brand" href="/">Foqui</a>
+  </header>
+
   <main id="content">
-    <div class="welcome">
-    <header class="nav">
-      <a class="brand" href="/">
-        <img src="/images/foqui.webp" alt="" width="1200" height="900" />
-        Foqui
-      </a>
-      <nav aria-label="Page">
-        <div class="nav-links">
-          <a href="#session">Session</a>
-          <a href="#together">Together</a>
-          <a href="#labels">Labels</a>
-        </div>
-      </nav>
-    </header>
-
-    <div class="hero">
-      <div>
-        <h1>Foqui</h1>
-        <p class="sr-only" data-live aria-live="polite">
-          blocks distracting apps during your Study session
-        </p>
-        <div aria-hidden="true">
-          <p class="hero-lead">blocks distracting apps during your</p>
-          <p class="rotator-label" data-label>{scenes[0].label}</p>
-        </div>
-      </div>
-
-      <div class="rotator-art" aria-hidden="true">
+    <section class="hero">
+      <div class="hero-layout">
         <img
-          class="scene-art"
-          data-art
-          src={scenes[0].image}
+          class="mark"
+          src="/images/foqui.webp"
           alt=""
           width="1200"
           height="900"
         />
-      </div>
-
-      <div class="hero-action">
-        <a class="button" href="#session">How a session works</a>
-      </div>
-    </div>
-    </div>
-
-  <section class="section" id="session">
-    <div class="wrap">
-      <h2>Put chosen apps away for a while.</h2>
-      <p class="lede">
-        You create a session, choose the apps you want to block, and press start.
-      </p>
-      <ol class="steps narrow">
-        <li>
-          <span class="step-index">1</span>
-          <div>
-            <h3>Choose a block list</h3>
-            <p>
-              A block list is the apps, categories, and websites Foqui shields.
-              Nothing is blocked until you start.
-            </p>
-          </div>
-        </li>
-        <li>
-          <span class="step-index">2</span>
-          <div>
-            <h3>Pick a length</h3>
-            <p>From 15 minutes to 3 hours, or until you end it.</p>
-            <ul class="presets">
-              {lengths.map((length) => <li>{length}</li>)}
-            </ul>
-          </div>
-        </li>
-        <li>
-          <span class="step-index">3</span>
-          <div>
-            <h3>Press start</h3>
-            <p>
-              Opening a blocked app shows Foqui, with the time that app comes
-              back. The shield stays up after you leave.
-            </p>
-          </div>
-        </li>
-      </ol>
-    </div>
-  </section>
-
-  <section class="section follow" id="for">
-    <div class="wrap">
-      <h2>Study, deep work, time together</h2>
-      <p class="lede">
-        It’s for study sessions, deep work, family time, couple time, even a
-        digital detox.
-      </p>
-      <ul class="scene-grid">
-        {
-          scenes.map((scene) => (
-            <li class="scene-card">
-              <img src={scene.image} alt="" width="1200" height="900" />
-              <h3>{scene.label}</h3>
-              <p>{scene.text}</p>
-            </li>
-          ))
-        }
-      </ul>
-    </div>
-  </section>
-
-  <section class="section follow" id="together">
-    <div class="wrap">
-      <div class="together">
-        <div>
-          <h2>Share the session</h2>
+        <div class="hero-copy">
+          <h1>Put distracting<br />apps away.</h1>
           <p class="lede">
-            Friends and family join from a link. Each person brings their own
-            block list.
+            An app blocker for study sessions, deep work, or family time.
+            <br />
+            On your own, <span class="lede-emphasis">or with others.</span>
           </p>
-          <ul class="points">
-            <li>You can chat with the people in the session.</li>
-            <li>A pause waits until everyone accepts.</li>
-            <li>If you leave, everyone else keeps going.</li>
-          </ul>
+          <div class="stores">
+            <a class="store" href={appStoreUrl}>
+              <svg class="store-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M16.37 12.27c.03 2.58 2.26 3.44 2.29 3.45-.02.06-.36 1.23-1.18 2.44-.71 1.04-1.45 2.08-2.62 2.1-1.15.02-1.52-.68-2.83-.68-1.31 0-1.72.66-2.8.7-1.12.04-1.97-1.12-2.69-2.16-1.47-2.12-2.59-6-1.08-8.62.75-1.3 2.09-2.12 3.54-2.14 1.1-.02 2.14.74 2.81.74.67 0 1.93-.92 3.25-.78.55.02 2.1.22 3.1 1.67-.08.05-1.85 1.08-1.83 3.22zM14.2 6.3c.59-.72.99-1.72.88-2.72-.85.03-1.88.57-2.49 1.28-.55.63-1.03 1.65-.9 2.62.95.07 1.92-.48 2.51-1.18z"
+                ></path>
+              </svg>
+              <span class="store-label">
+                <span class="store-kicker">Download on the</span>
+                <span class="store-name">App Store</span>
+              </span>
+            </a>
+            <a class="store" href={playStoreUrl}>
+              <svg class="store-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M22.02 13.3 18.1 15.52l-3.52-3.5 3.52-3.49 3.92 2.22a1.49 1.49 0 0 1 0 2.55zM1.34.92a1.49 1.49 0 0 0-.11.57v21.02c0 .22.04.42.12.6l11.16-11.09L1.34.92zm12.2 10.07 3.26-3.24L3.45.2a1.47 1.47 0 0 0-.95-.18l11.04 10.97zm0 2.07L2.5 24.03c.3.09.63.05.95-.18l13.35-7.56-3.26-3.23z"
+                ></path>
+              </svg>
+              <span class="store-label">
+                <span class="store-kicker">Get it on</span>
+                <span class="store-name">Google Play</span>
+              </span>
+            </a>
+          </div>
         </div>
-        <img
-          src="/images/foqui-family.webp"
-          alt=""
-          width="1200"
-          height="900"
-        />
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section follow" id="labels">
-    <div class="wrap">
-      <h2>A name for the time</h2>
-      <p class="lede">
-        A label is the name a session wears. Pick one before you start, and
-        Foqui groups your history and stats by it — today, this week, your
-        streak, and how long you stayed.
-      </p>
-      <ul class="labels" aria-label="Labels">
-        {labels.map((label) => <li>{label}</li>)}
-      </ul>
-      <div class="note narrow">
-        <ul class="points">
-          <li>Apps on your block list stay shielded until the timer ends.</li>
-          <li>On iPhone, Screen Time is only used for the lists you choose.</li>
+    <section class="section" id="how">
+      <div class="wrap">
+        <h2>How it works</h2>
+        <ol class="steps">
           <li>
-            On Android, Foqui only checks which app is open. It does not read
-            what’s on screen.
+            <span class="step-index" aria-hidden="true">1</span>
+            <span class="step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <rect x="3.5" y="3.5" width="7" height="7" rx="1.8" fill="currentColor"></rect>
+                <rect x="13.5" y="3.5" width="7" height="7" rx="1.8" fill="currentColor"></rect>
+                <rect x="3.5" y="13.5" width="7" height="7" rx="1.8" fill="currentColor"></rect>
+                <rect x="13.5" y="13.5" width="7" height="7" rx="1.8" fill="currentColor"></rect>
+              </svg>
+            </span>
+            <h3>Set your preferences</h3>
+            <p>
+              Choose a block list, set a duration, and a label. Nothing is
+              blocked until you start.
+            </p>
+          </li>
+          <li>
+            <span class="step-index" aria-hidden="true">2</span>
+            <span class="step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="8.25" fill="none" stroke="currentColor" stroke-width="1.8"></circle>
+                <path fill="currentColor" d="M10.1 8.4v7.2l6-3.6z"></path>
+              </svg>
+            </span>
+            <h3>Start the session</h3>
+            <p>
+              Foqui blocks those apps until the time is up. You can pause after 20
+              minutes and stop it after the first 5 minutes.
+            </p>
+          </li>
+          <li>
+            <span class="step-index" aria-hidden="true">3</span>
+            <span class="step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="7" cy="12" r="2.1" fill="currentColor"></circle>
+                <circle cx="16.5" cy="7.2" r="2.1" fill="currentColor"></circle>
+                <circle cx="16.5" cy="16.8" r="2.1" fill="currentColor"></circle>
+                <path d="M9 11.2 14.4 8.4M9 12.8l5.4 2.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"></path>
+              </svg>
+            </span>
+            <h3>Let others join</h3>
+            <p>
+              Share a link. Friends and family join the same session, each with
+              their own list of apps to block.
+            </p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="wrap">
+        <h2>Features</h2>
+        <div class="feature-stage">
+        <ul class="features">
+          <li class="is-active">
+            <span class="step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path
+                  fill="currentColor"
+                  d="M6 5.2h12A2.2 2.2 0 0 1 20.2 7.4v7.2a2.2 2.2 0 0 1-2.2 2.2H11l-3.6 3.1a.7.7 0 0 1-1.2-.5v-2.6H6a2.2 2.2 0 0 1-2.2-2.2V7.4A2.2 2.2 0 0 1 6 5.2z"
+                ></path>
+              </svg>
+            </span>
+            <h3>Chat in sessions</h3>
+            <p>
+              Talk during a session, on your own or with other people. Messages
+              stay with that session.
+            </p>
+          </li>
+          <li>
+            <span class="step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path
+                  fill="currentColor"
+                  d="M4 13.2h3.4V20H4v-6.8zm6.3-4.6h3.4V20h-3.4V8.6zM16.6 4H20v16h-3.4V4z"
+                ></path>
+              </svg>
+            </span>
+            <h3>Stats</h3>
+            <p>
+              See how today and this week went, and how many days you've kept
+              going.
+            </p>
+          </li>
+          <li>
+            <span class="step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <rect x="5" y="10.4" width="14" height="9.2" rx="2.2" fill="currentColor"></rect>
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  d="M8.2 10.5V8a3.8 3.8 0 0 1 7.6 0v2.5"
+                ></path>
+              </svg>
+            </span>
+            <h3>Restrictive mode</h3>
+            <p>
+              Stick with the time you set. You can't end the session early.
+            </p>
+          </li>
+          <li>
+            <span class="step-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="3.1" fill="currentColor"></circle>
+                <path
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.7"
+                  stroke-linecap="round"
+                  d="M12 3.2v2.1M12 18.7v2.1M3.2 12h2.1M18.7 12h2.1M5.7 5.7l1.5 1.5M16.8 16.8l1.5 1.5M18.3 5.7l-1.5 1.5M7.2 16.8l-1.5 1.5"
+                ></path>
+              </svg>
+            </span>
+            <h3>Vacation mode</h3>
+            <p>
+              Take a few days off. Those days don't break your streak, and you
+              can turn it off when you're back.
+            </p>
           </li>
         </ul>
+          <button type="button" class="feature-control" data-feature-prev aria-label="Previous feature">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14.5 6.5 9 12l5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+          <button type="button" class="feature-control" data-feature-next aria-label="Next feature">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9.5 6.5 15 12l-5.5 5.5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </button>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <Footer />
+    <section class="section" id="faq">
+      <div class="wrap">
+        <h2>FAQs</h2>
+        <dl class="faq">
+          <div>
+            <dt>Can I do a session on my own?</dt>
+            <dd>
+              Yes. Share a link only when you want other people in the same
+              session. Each person brings their own list of apps to block.
+            </dd>
+          </div>
+          <div>
+            <dt>What if I open a blocked app?</dt>
+            <dd>You see Foqui, and the time that app comes back.</dd>
+          </div>
+          <div>
+            <dt>What if I close Foqui?</dt>
+            <dd>The apps stay blocked until the session ends.</dd>
+          </div>
+          <div>
+            <dt>What if I take a few days off?</dt>
+            <dd>
+              Turn on vacation mode. Those days don't break your streak, and
+              you can turn it off when you're back.
+            </dd>
+          </div>
+          <div>
+            <dt>What happens when other people join?</dt>
+            <dd>
+              A pause waits until everyone accepts. If you leave, everyone else
+              keeps going.
+            </dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <Footer />
   </main>
-  <script define:vars={{ scenes: scenes.map((scene) => ({ label: scene.label, image: scene.image })) }}>
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const label = document.querySelector("[data-label]");
-  const art = document.querySelector("[data-art]");
-  const live = document.querySelector("[data-live]");
-
-  if (!reduce && label && art && scenes.length > 1) {
-    let index = 0;
-    let timer = 0;
-    let swapTimer = 0;
-
-    const tick = () => {
-      label.classList.add("is-out");
-      art.classList.add("is-out");
-      window.clearTimeout(swapTimer);
-      swapTimer = window.setTimeout(() => {
-        index = (index + 1) % scenes.length;
-        const scene = scenes[index];
-        label.textContent = scene.label;
-        art.setAttribute("src", scene.image);
-        if (live) {
-          live.textContent = `blocks distracting apps during your ${scene.label}`;
-        }
-        label.classList.remove("is-out");
-        art.classList.remove("is-out");
-      }, 160);
-    };
-
-    const arm = (delay) => {
-      window.clearTimeout(timer);
-      timer = window.setTimeout(() => {
-        tick();
-        arm(1600);
-      }, delay);
-    };
-
-    document.addEventListener("visibilitychange", () => {
-      if (document.hidden) {
-        window.clearTimeout(timer);
-        window.clearTimeout(swapTimer);
-      } else {
-        arm(1600);
-      }
-    });
-
-    arm(700);
-  }
-</script>
+  <script>
+    const features = document.querySelector(".features");
+    if (features) {
+      const items = [...features.querySelectorAll(":scope > li")];
+      const wide = window.matchMedia("(min-width: 800px)");
+      let index = Math.max(
+        0,
+        items.findIndex((item) => item.classList.contains("is-active")),
+      );
+      const show = (next) => {
+        index = (next + items.length) % items.length;
+        items.forEach((item, i) => item.classList.toggle("is-active", i === index));
+      };
+      const equalize = () => {
+        items.forEach((item) => {
+          item.style.minHeight = "";
+        });
+        if (!wide.matches) return;
+        const height = Math.max(
+          ...items.map((item) => item.getBoundingClientRect().height),
+        );
+        const next = `${Math.ceil(height)}px`;
+        items.forEach((item) => {
+          item.style.minHeight = next;
+        });
+      };
+      document
+        .querySelector("[data-feature-prev]")
+        ?.addEventListener("click", () => show(index - 1));
+      document
+        .querySelector("[data-feature-next]")
+        ?.addEventListener("click", () => show(index + 1));
+      wide.addEventListener("change", equalize);
+      window.addEventListener("resize", equalize);
+      equalize();
+      document.fonts?.ready.then(equalize);
+    }
+  </script>
 </Base>
